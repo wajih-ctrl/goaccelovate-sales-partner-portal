@@ -1,7 +1,7 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist/client",
-  "framework": "other",
+  "framework": "react-router",
   "functions": {
     "dist/server/server.js": {
       "runtime": "nodejs20.x",
