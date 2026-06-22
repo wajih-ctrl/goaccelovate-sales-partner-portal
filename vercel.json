@@ -1,33 +1,10 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist/client",
-  "framework": "react-router",
-  "functions": {
-    "dist/server/server.js": {
-      "runtime": "nodejs@20.x",
-      "memory": 1024,
-      "maxDuration": 60
-    }
-  },
-  "routes": [
+  "rewrites": [
     {
-      "src": "^/api/.*",
-      "dest": "dist/server/server.js"
-    },
-    {
-      "src": "^/.*",
-      "dest": "dist/server/server.js"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/assets/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
+      "source": "/(.*)",
+      "destination": "/"
     }
   ]
 }
