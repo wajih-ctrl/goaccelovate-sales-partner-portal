@@ -1,6 +1,7 @@
-import { createFileRoute, Outlet, Navigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, Navigate, useRouterState } from "@tanstack/react-router";
 import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/lib/auth";
+import { isPathAllowedForRole } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_app")({
   component: AppLayout,
@@ -8,8 +9,10 @@ export const Route = createFileRoute("/_app")({
 
 function AppLayout() {
   const { user, ready } = useAuth();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   if (!ready) return null;
-  if (!user) return <Navigate to="/login" />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!isPathAllowedForRole(user.role, pathname)) return <Navigate to="/access-denied" replace />;
   return (
     <AppShell>
       <Outlet />

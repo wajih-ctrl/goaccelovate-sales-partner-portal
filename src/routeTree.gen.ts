@@ -15,6 +15,7 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AccessDeniedRouteImport } from './routes/access-denied'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiInvitationsRouteImport } from './routes/api.invitations'
 import { Route as AppUsersRouteImport } from './routes/_app.users'
 import { Route as AppSubmitLeadRouteImport } from './routes/_app.submit-lead'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
@@ -64,6 +65,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInvitationsRoute = ApiInvitationsRouteImport.update({
+  id: '/api/invitations',
+  path: '/api/invitations',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppUsersRoute = AppUsersRouteImport.update({
@@ -197,6 +203,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AppSettingsRoute
   '/submit-lead': typeof AppSubmitLeadRoute
   '/users': typeof AppUsersRoute
+  '/api/invitations': typeof ApiInvitationsRoute
   '/leads/$id': typeof AppLeadsIdRoute
   '/partners/$id': typeof AppPartnersIdRoute
 }
@@ -225,6 +232,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AppSettingsRoute
   '/submit-lead': typeof AppSubmitLeadRoute
   '/users': typeof AppUsersRoute
+  '/api/invitations': typeof ApiInvitationsRoute
   '/leads/$id': typeof AppLeadsIdRoute
   '/partners/$id': typeof AppPartnersIdRoute
 }
@@ -255,6 +263,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRoute
   '/_app/submit-lead': typeof AppSubmitLeadRoute
   '/_app/users': typeof AppUsersRoute
+  '/api/invitations': typeof ApiInvitationsRoute
   '/_app/leads/$id': typeof AppLeadsIdRoute
   '/_app/partners/$id': typeof AppPartnersIdRoute
 }
@@ -285,6 +294,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/submit-lead'
     | '/users'
+    | '/api/invitations'
     | '/leads/$id'
     | '/partners/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -313,6 +323,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/submit-lead'
     | '/users'
+    | '/api/invitations'
     | '/leads/$id'
     | '/partners/$id'
   id:
@@ -342,6 +353,7 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_app/submit-lead'
     | '/_app/users'
+    | '/api/invitations'
     | '/_app/leads/$id'
     | '/_app/partners/$id'
   fileRoutesById: FileRoutesById
@@ -353,6 +365,7 @@ export interface RootRouteChildren {
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   InvitationRoute: typeof InvitationRoute
   LoginRoute: typeof LoginRoute
+  ApiInvitationsRoute: typeof ApiInvitationsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -397,6 +410,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/invitations': {
+      id: '/api/invitations'
+      path: '/api/invitations'
+      fullPath: '/api/invitations'
+      preLoaderRoute: typeof ApiInvitationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/users': {
@@ -626,6 +646,7 @@ const rootRouteChildren: RootRouteChildren = {
   ForgotPasswordRoute: ForgotPasswordRoute,
   InvitationRoute: InvitationRoute,
   LoginRoute: LoginRoute,
+  ApiInvitationsRoute: ApiInvitationsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

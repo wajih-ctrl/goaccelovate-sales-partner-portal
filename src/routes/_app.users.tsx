@@ -7,48 +7,102 @@ import { useStore } from "@/lib/store";
 import { toast } from "sonner";
 import { UserPlus, MoreHorizontal } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { useState } from "react";
 import { FormDialog, ReasonDialog } from "@/components/common/dialogs";
+import { sendRealInvitation } from "@/lib/real-invitations";
 
 export const Route = createFileRoute("/_app/users")({ component: UsersPage });
 
-const TIERS = ["Associate", "Specialist", "Partner"];
+type InviteRole = "partner" | "admin";
+type InviteTier = "Associate" | "Specialist" | "Partner";
+
+const TIERS: InviteTier[] = ["Associate", "Specialist", "Partner"];
 
 function UsersPage() {
-  const { user } = useAuth();
-  const { partners, staffUsers, invites, settings, inviteUser, suspendUser, reactivateUser, deleteUser, changePartnerTier, changePartnerRate } = useStore();
-  if (user?.role !== "super_admin") return <Navigate to="/access-denied" />;
+  const { user, authMode } = useAuth();
+  const {
+    partners,
+    staffUsers,
+    invites,
+    settings,
+    inviteUser,
+    suspendUser,
+    reactivateUser,
+    deleteUser,
+    changePartnerTier,
+    changePartnerRate,
+  } = useStore();
 
   const [showInvite, setShowInvite] = useState(false);
-  const [invite, setInvite] = useState({ name: "", email: "", role: "partner" as "partner" | "admin", tier: "Associate" });
+  const [invite, setInvite] = useState({
+    name: "",
+    email: "",
+    role: "partner" as InviteRole,
+    tier: "Associate" as InviteTier,
+  });
+  const [inviteLoading, setInviteLoading] = useState(false);
   const [tierTarget, setTierTarget] = useState<{ id: string; tier: string } | null>(null);
   const [rateTarget, setRateTarget] = useState<{ id: string; rate: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  if (user?.role !== "super_admin") return <Navigate to="/access-denied" />;
 
   return (
     <>
       <PageHeader
         title="User Management"
         description="Invite, suspend, change roles, and manage all portal accounts."
-        actions={<Button onClick={() => setShowInvite(true)}><UserPlus className="mr-2 h-4 w-4" />Invite user</Button>}
+        actions={
+          <Button onClick={() => setShowInvite(true)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Invite user
+          </Button>
+        }
       />
       <PageContainer>
         {invites.length > 0 && (
           <Card className="overflow-hidden">
-            <div className="border-b bg-accent/40 px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Pending invitations ({invites.length})</div>
+            <div className="border-b bg-accent/40 px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Pending invitations ({invites.length})
+            </div>
             <table className="w-full text-sm">
               <tbody>
-                {invites.map(i => (
+                {invites.map((i) => (
                   <tr key={i.id} className="border-t">
                     <td className="px-4 py-3 font-medium">{i.name}</td>
                     <td className="px-4 py-3 text-muted-foreground">{i.email}</td>
-                    <td className="px-4 py-3 capitalize">{i.role}{i.tier ? ` · ${i.tier}` : ""}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">Sent {new Date(i.invitedDate).toLocaleDateString()} · expires in {settings.invitationExpiry}h</td>
+                    <td className="px-4 py-3 capitalize">
+                      {i.role}
+                      {i.tier ? ` · ${i.tier}` : ""}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      Sent {new Date(i.invitedDate).toLocaleDateString()} · expires in{" "}
+                      {settings.invitationExpiry}h
+                    </td>
                     <td className="px-4 py-3 text-right space-x-1">
-                      <Button size="sm" variant="ghost" onClick={() => toast.success(`Invitation resent to ${i.email}`)}>Resend</Button>
-                      <Button size="sm" variant="ghost" onClick={() => { deleteUser(i.id, user.name); toast.warning("Invitation revoked"); }}>Revoke</Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => toast.success(`Invitation resent to ${i.email}`)}
+                      >
+                        Resend
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          deleteUser(i.id, user.name);
+                          toast.warning("Invitation revoked");
+                        }}
+                      >
+                        Revoke
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -58,7 +112,9 @@ function UsersPage() {
         )}
 
         <Card className="shadow-card overflow-hidden">
-          <div className="border-b bg-accent/40 px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Active accounts</div>
+          <div className="border-b bg-accent/40 px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Active accounts
+          </div>
           <table className="w-full text-sm">
             <thead className="text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
@@ -72,40 +128,77 @@ function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {staffUsers.map(u => (
+              {staffUsers.map((u) => (
                 <tr key={u.id} className="border-t hover:bg-accent/20">
                   <td className="px-4 py-3 font-medium">{u.name}</td>
                   <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
                   <td className="px-4 py-3 capitalize">{u.role.replace("_", " ")}</td>
                   <td className="px-4 py-3 text-muted-foreground">—</td>
                   <td className="px-4 py-3 text-right text-muted-foreground">—</td>
-                  <td className="px-4 py-3"><StatusBadge status="Active" /></td>
-                  <td className="px-4 py-3 text-right text-xs text-muted-foreground">Staff account</td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status="Active" />
+                  </td>
+                  <td className="px-4 py-3 text-right text-xs text-muted-foreground">
+                    Staff account
+                  </td>
                 </tr>
               ))}
-              {partners.map(p => (
+              {partners.map((p) => (
                 <tr key={p.id} className="border-t hover:bg-accent/20">
                   <td className="px-4 py-3 font-medium">{p.name}</td>
                   <td className="px-4 py-3 text-muted-foreground">{p.email}</td>
                   <td className="px-4 py-3">Sales Partner</td>
-                  <td className="px-4 py-3"><TierBadge tier={p.tier} /></td>
+                  <td className="px-4 py-3">
+                    <TierBadge tier={p.tier} />
+                  </td>
                   <td className="px-4 py-3 text-right">{p.commissionRate}%</td>
-                  <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={p.status} />
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setTierTarget({ id: p.id, tier: p.tier })}>Change tier</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setRateTarget({ id: p.id, rate: String(p.commissionRate) })}>Set commission rate</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setTierTarget({ id: p.id, tier: p.tier })}>
+                          Change tier
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            setRateTarget({ id: p.id, rate: String(p.commissionRate) })
+                          }
+                        >
+                          Set commission rate
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {p.status === "Active" ? (
-                          <DropdownMenuItem onClick={() => { suspendUser(p.id, user.name); toast.warning(`${p.name} suspended`); }}>Suspend</DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              suspendUser(p.id, user.name);
+                              toast.warning(`${p.name} suspended`);
+                            }}
+                          >
+                            Suspend
+                          </DropdownMenuItem>
                         ) : (
-                          <DropdownMenuItem onClick={() => { reactivateUser(p.id, user.name); toast.success(`${p.name} reactivated`); }}>Reactivate</DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              reactivateUser(p.id, user.name);
+                              toast.success(`${p.name} reactivated`);
+                            }}
+                          >
+                            Reactivate
+                          </DropdownMenuItem>
                         )}
-                        <DropdownMenuItem className="text-destructive" onClick={() => setDeleteTarget(p.id)}>Delete account</DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => setDeleteTarget(p.id)}
+                        >
+                          Delete account
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </td>
@@ -120,27 +213,73 @@ function UsersPage() {
         open={showInvite}
         onOpenChange={setShowInvite}
         title="Invite new user"
-        canSubmit={!!invite.name.trim() && !!invite.email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invite.email)}
-        submitLabel="Send invitation"
-        onSubmit={() => {
-          inviteUser(invite, user.name);
+        canSubmit={
+          !!invite.name.trim() &&
+          !!invite.email.trim() &&
+          /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invite.email)
+        }
+        submitLabel={inviteLoading ? "Sending..." : "Send invitation"}
+        onSubmit={async () => {
+          setInviteLoading(true);
+          const payload = {
+            name: invite.name.trim(),
+            email: invite.email.trim(),
+            role: invite.role,
+            tier: invite.role === "partner" ? invite.tier : undefined,
+          };
+          const result = authMode === "supabase" ? await sendRealInvitation(payload) : {};
+          setInviteLoading(false);
+
+          if (result.error) {
+            toast.error(result.error);
+            return;
+          }
+
+          inviteUser(payload, user.name);
           toast.success(`Invitation sent to ${invite.email}`);
           setShowInvite(false);
           setInvite({ name: "", email: "", role: "partner", tier: "Associate" });
         }}
       >
-        <label className="text-xs">Full name<input className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={invite.name} onChange={e => setInvite({ ...invite, name: e.target.value })} /></label>
-        <label className="text-xs">Email<input type="email" className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={invite.email} onChange={e => setInvite({ ...invite, email: e.target.value })} /></label>
-        <label className="text-xs">Role
-          <select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={invite.role} onChange={e => setInvite({ ...invite, role: e.target.value as any })}>
+        <label className="text-xs">
+          Full name
+          <input
+            className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+            value={invite.name}
+            onChange={(e) => setInvite({ ...invite, name: e.target.value })}
+          />
+        </label>
+        <label className="text-xs">
+          Email
+          <input
+            type="email"
+            className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+            value={invite.email}
+            onChange={(e) => setInvite({ ...invite, email: e.target.value })}
+          />
+        </label>
+        <label className="text-xs">
+          Role
+          <select
+            className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+            value={invite.role}
+            onChange={(e) => setInvite({ ...invite, role: e.target.value as InviteRole })}
+          >
             <option value="partner">Sales Partner</option>
             <option value="admin">Admin</option>
           </select>
         </label>
         {invite.role === "partner" && (
-          <label className="text-xs">Tier
-            <select className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={invite.tier} onChange={e => setInvite({ ...invite, tier: e.target.value })}>
-              {TIERS.map(t => <option key={t}>{t}</option>)}
+          <label className="text-xs">
+            Tier
+            <select
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={invite.tier}
+              onChange={(e) => setInvite({ ...invite, tier: e.target.value as InviteTier })}
+            >
+              {TIERS.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
             </select>
           </label>
         )}
@@ -159,8 +298,14 @@ function UsersPage() {
         }}
       >
         {tierTarget && (
-          <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={tierTarget.tier} onChange={e => setTierTarget({ ...tierTarget, tier: e.target.value })}>
-            {TIERS.map(t => <option key={t}>{t}</option>)}
+          <select
+            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+            value={tierTarget.tier}
+            onChange={(e) => setTierTarget({ ...tierTarget, tier: e.target.value })}
+          >
+            {TIERS.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
           </select>
         )}
       </FormDialog>
@@ -178,7 +323,16 @@ function UsersPage() {
         }}
       >
         {rateTarget && (
-          <label className="text-xs">Commission rate (%)<input type="number" step="0.5" className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm" value={rateTarget.rate} onChange={e => setRateTarget({ ...rateTarget, rate: e.target.value })} /></label>
+          <label className="text-xs">
+            Commission rate (%)
+            <input
+              type="number"
+              step="0.5"
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={rateTarget.rate}
+              onChange={(e) => setRateTarget({ ...rateTarget, rate: e.target.value })}
+            />
+          </label>
         )}
       </FormDialog>
 
@@ -188,7 +342,11 @@ function UsersPage() {
         title="Delete account"
         description="This will remove the partner from the system. Type a justification for the audit log."
         confirmLabel="Delete account"
-        onConfirm={(reason) => { deleteUser(deleteTarget!, `${user.name} (${reason})`); toast.error("Account deleted"); setDeleteTarget(null); }}
+        onConfirm={(reason) => {
+          deleteUser(deleteTarget!, `${user.name} (${reason})`);
+          toast.error("Account deleted");
+          setDeleteTarget(null);
+        }}
       />
     </>
   );
