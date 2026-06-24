@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Download, FileSpreadsheet, FileText } from "lucide-react";
+import { FileSpreadsheet, FileText } from "lucide-react";
 
 import { PageContainer, PageHeader } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { downloadCsv, downloadSimplePdf } from "@/lib/exports";
+import { downloadCsv } from "@/lib/exports";
 import { fmtCurrency } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
@@ -195,6 +195,15 @@ function Reports() {
   ];
 
   const list = isPartner ? partnerReports : adminReports;
+  const exportReport = (report: {
+    file: string;
+    rows: (string | number | boolean | null | undefined)[][];
+  }) => {
+    if (isPartner && report.file !== "my-leads" && report.file !== "commission-statement") {
+      return;
+    }
+    downloadCsv(`${report.file}.csv`, report.rows);
+  };
   const totals = isPartner
     ? {
         leads: leads.filter((lead) => lead.partnerId === partnerId).length,
@@ -244,21 +253,12 @@ function Reports() {
                 <FileText className="h-5 w-5 text-muted-foreground" />
               </div>
               <div className="mt-4 flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => downloadCsv(`${report.file}.csv`, report.rows)}
-                >
+                <Button size="sm" variant="outline" onClick={() => exportReport(report)}>
                   <FileSpreadsheet className="mr-2 h-4 w-4" />
                   CSV
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => downloadSimplePdf(`${report.file}.pdf`, report.name, report.rows)}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  PDF
+                <Button size="sm" variant="outline" disabled>
+                  PDF coming soon
                 </Button>
               </div>
             </Card>

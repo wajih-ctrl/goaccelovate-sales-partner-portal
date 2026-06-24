@@ -44,7 +44,7 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Jost", ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
@@ -85,7 +85,8 @@
   --sidebar-border: oklch(0.3 0.05 258);
   --sidebar-ring: oklch(0.55 0.18 255);
   --shadow-card: 0 1px 2px 0 oklch(0.2 0.05 255 / 0.04), 0 1px 3px 0 oklch(0.2 0.05 255 / 0.06);
-  --shadow-elevated: 0 4px 12px -2px oklch(0.2 0.05 255 / 0.08), 0 2px 6px -1px oklch(0.2 0.05 255 / 0.05);
+  --shadow-elevated:
+    0 4px 12px -2px oklch(0.2 0.05 255 / 0.08), 0 2px 6px -1px oklch(0.2 0.05 255 / 0.05);
   --gradient-brand: linear-gradient(135deg, oklch(0.55 0.18 255), oklch(0.45 0.2 268));
 }
 
@@ -109,16 +110,77 @@
 }
 
 @layer base {
-  * { border-color: var(--color-border); }
+  * {
+    border-color: var(--color-border);
+  }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
-  h1, h2, h3, h4 { letter-spacing: -0.02em; }
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: 0;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+  table {
+    min-width: 44rem;
+    white-space: nowrap;
+  }
+  th,
+  td {
+    max-width: 18rem;
+    overflow-wrap: anywhere;
+  }
+  main img,
+  main video,
+  main canvas,
+  main svg {
+    max-width: 100%;
+  }
+  main .shadow-card:has(> table),
+  main .overflow-hidden:has(> table) {
+    overflow-x: auto;
+  }
+  main [class*="grid"] {
+    min-width: 0;
+  }
+  main a,
+  main p,
+  main h1,
+  main h2,
+  main h3,
+  main h4,
+  main span,
+  main div {
+    min-width: 0;
+  }
+  @media (max-width: 640px) {
+    table {
+      min-width: 38rem;
+    }
+    main button,
+    main a[role="button"] {
+      max-width: 100%;
+    }
+  }
 }
 
-@utility shadow-card { box-shadow: var(--shadow-card); }
-@utility shadow-elevated { box-shadow: var(--shadow-elevated); }
-@utility bg-gradient-brand { background-image: var(--gradient-brand); }
+@utility shadow-card {
+  box-shadow: var(--shadow-card);
+}
+@utility shadow-elevated {
+  box-shadow: var(--shadow-elevated);
+}
+@utility bg-gradient-brand {
+  background-image: var(--gradient-brand);
+}

@@ -52,6 +52,7 @@ function mapProfile(profile: ProfileRow): User {
     role: profile.role,
     partnerId: profile.partner_id || undefined,
     avatar: profile.avatar_url || undefined,
+    accountStatus: profile.account_status,
   };
 }
 

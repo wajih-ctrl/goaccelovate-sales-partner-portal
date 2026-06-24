@@ -1306,6 +1306,30 @@ export type Database = {
         };
         Returns: string;
       };
+      open_commission_dispute: {
+        Args: { commission_id: string; reason: string };
+        Returns: Database["public"]["Tables"]["disputes"]["Row"];
+      };
+      request_commission_payout: {
+        Args: { commission_ids: string[]; message?: string };
+        Returns: Database["public"]["Tables"]["payout_requests"]["Row"];
+      };
+      submit_partner_lead: {
+        Args: {
+          company_name: string;
+          contact_email: string;
+          contact_name: string;
+          contact_phone: string;
+          contact_title: string;
+          country: string;
+          currency: string;
+          description: string;
+          estimated_value: number;
+          industry: string;
+          lead_id: string;
+        };
+        Returns: Database["public"]["Tables"]["leads"]["Row"];
+      };
     };
     Enums: {
       account_status: "active" | "suspended" | "pending" | "deactivated";

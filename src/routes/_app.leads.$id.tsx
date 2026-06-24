@@ -39,11 +39,14 @@ function LeadDetail() {
   const lead = store.leads.find((l) => l.id === id);
   const [comment, setComment] = useState("");
   const [showCall, setShowCall] = useState(false);
+  const [showApproveDuplicate, setShowApproveDuplicate] = useState(false);
   const [showReject, setShowReject] = useState(false);
   const [showCloseWon, setShowCloseWon] = useState(false);
   const [pendingStage, setPendingStage] = useState<LeadStage | null>(null);
   const [pendingStatus, setPendingStatus] = useState<LeadStatus | null>(null);
   const [confirmedValue, setConfirmedValue] = useState("");
+  const [attachmentPrivate, setAttachmentPrivate] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [call, setCall] = useState({
     date: "",
     duration: "30",
@@ -55,6 +58,7 @@ function LeadDetail() {
     nextSteps: "",
     followUp: "",
     attachmentName: "",
+    attachmentFile: undefined as File | undefined,
     private: false,
   });
 
@@ -81,11 +85,12 @@ function LeadDetail() {
     toast.success(priv ? "Private note added" : "Comment posted");
   };
 
-  const upload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    store.addAttachment(id, f.name, user!.name);
-    toast.success(`${f.name} uploaded`);
+    setUploadingFile(true);
+    await store.addAttachment(id, f, user!.name, isAdmin && attachmentPrivate);
+    setUploadingFile(false);
     e.target.value = "";
   };
 
@@ -94,38 +99,42 @@ function LeadDetail() {
       toast.error("Date and summary are required");
       return;
     }
-    store.addCall(
-      {
-        leadId: id,
-        date: call.date,
-        duration: Number(call.duration) || 30,
-        attendees: call.attendees,
-        clientAttendees: call.clientAttendees,
-        partnerJoined: call.partnerJoined,
-        summary: call.summary,
-        outcomes: call.outcomes,
-        nextSteps: call.nextSteps,
-        followUp: call.followUp,
-        attachmentName: call.attachmentName,
-        private: call.private,
-      },
-      user!.name,
-    );
-    toast.success("Discovery call logged");
-    setShowCall(false);
-    setCall({
-      date: "",
-      duration: "30",
-      attendees: "",
-      clientAttendees: "",
-      partnerJoined: false,
-      summary: "",
-      outcomes: "",
-      nextSteps: "",
-      followUp: "",
-      attachmentName: "",
-      private: false,
-    });
+    void (async () => {
+      const saved = await store.addCall(
+        {
+          leadId: id,
+          date: call.date,
+          duration: Number(call.duration) || 30,
+          attendees: call.attendees,
+          clientAttendees: call.clientAttendees,
+          partnerJoined: call.partnerJoined,
+          summary: call.summary,
+          outcomes: call.outcomes,
+          nextSteps: call.nextSteps,
+          followUp: call.followUp,
+          attachmentName: call.attachmentFile?.name || call.attachmentName,
+          attachmentFile: call.attachmentFile,
+          private: call.private,
+        },
+        user!.name,
+      );
+      if (!saved) return;
+      setShowCall(false);
+      setCall({
+        date: "",
+        duration: "30",
+        attendees: "",
+        clientAttendees: "",
+        partnerJoined: false,
+        summary: "",
+        outcomes: "",
+        nextSteps: "",
+        followUp: "",
+        attachmentName: "",
+        attachmentFile: undefined,
+        private: false,
+      });
+    })();
   };
 
   const changeStage = (stage: LeadStage) => {
@@ -197,13 +206,7 @@ function LeadDetail() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={() => {
-                  store.approveDuplicate(id, user!.name);
-                  toast.success("Accepted into pipeline");
-                }}
-              >
+              <Button size="sm" onClick={() => setShowApproveDuplicate(true)}>
                 <Check className="mr-1 h-4 w-4" />
                 Accept
               </Button>
@@ -423,18 +426,49 @@ function LeadDetail() {
                     <ul className="divide-y text-sm">
                       {files.map((f) => (
                         <li key={f.id} className="flex items-center justify-between py-2">
-                          <span>{f.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(f.date).toLocaleDateString()}
-                          </span>
+                          <div>
+                            <span>{f.name}</span>
+                            {f.private && (
+                              <Lock className="ml-1 inline h-3 w-3 text-warning-foreground" />
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(f.date).toLocaleDateString()}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                store.downloadStoredFile(f.storageBucket, f.storagePath, f.name)
+                              }
+                            >
+                              Download
+                            </Button>
+                          </div>
                         </li>
                       ))}
                     </ul>
                   )}
+                  {isAdmin && (
+                    <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={attachmentPrivate}
+                        onChange={(e) => setAttachmentPrivate(e.target.checked)}
+                      />
+                      Private/internal file
+                    </label>
+                  )}
                   <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm hover:bg-accent/30">
                     <FileUp className="h-4 w-4" />
-                    <input type="file" className="hidden" onChange={upload} />
-                    Upload attachment
+                    <input
+                      type="file"
+                      className="hidden"
+                      onChange={upload}
+                      disabled={uploadingFile}
+                    />
+                    {uploadingFile ? "Uploading..." : "Upload attachment"}
                   </label>
                 </TabsContent>
               </Tabs>
@@ -522,11 +556,19 @@ function LeadDetail() {
             />
           </label>
           <label className="text-xs col-span-2">
-            Recording link or notes file
+            Recording link
             <input
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={call.attachmentName}
               onChange={(e) => setCall({ ...call, attachmentName: e.target.value })}
+            />
+          </label>
+          <label className="text-xs col-span-2">
+            Notes or recording file
+            <input
+              type="file"
+              className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              onChange={(e) => setCall({ ...call, attachmentFile: e.target.files?.[0] })}
             />
           </label>
           <label className="text-xs">
@@ -603,6 +645,19 @@ function LeadDetail() {
           store.updateLeadStatus(id, pendingStatus, user!.name, reason);
           toast.warning(`Lead marked ${pendingStatus}`);
           setPendingStatus(null);
+        }}
+      />
+
+      <ReasonDialog
+        open={showApproveDuplicate}
+        onOpenChange={setShowApproveDuplicate}
+        title="Override and allow duplicate"
+        description="Explain why this potential duplicate is allowed into the pipeline. The reason is saved to the activity log and audit log."
+        confirmLabel="Allow duplicate"
+        destructive={false}
+        onConfirm={(reason) => {
+          store.approveDuplicate(id, user!.name, reason);
+          toast.success("Accepted into pipeline");
         }}
       />
 

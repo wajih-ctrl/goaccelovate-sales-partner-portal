@@ -35,6 +35,7 @@ function UsersPage() {
     suspendUser,
     reactivateUser,
     deleteUser,
+    changeUserRole,
     changePartnerTier,
     changePartnerRate,
   } = useStore();
@@ -49,6 +50,7 @@ function UsersPage() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [tierTarget, setTierTarget] = useState<{ id: string; tier: string } | null>(null);
   const [rateTarget, setRateTarget] = useState<{ id: string; rate: string } | null>(null);
+  const [roleTarget, setRoleTarget] = useState<{ id: string; role: InviteRole } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   if (user?.role !== "super_admin") return <Navigate to="/access-denied" />;
@@ -136,10 +138,61 @@ function UsersPage() {
                   <td className="px-4 py-3 text-muted-foreground">—</td>
                   <td className="px-4 py-3 text-right text-muted-foreground">—</td>
                   <td className="px-4 py-3">
-                    <StatusBadge status="Active" />
+                    <StatusBadge
+                      status={
+                        u.accountStatus === "suspended"
+                          ? "Suspended"
+                          : u.accountStatus === "pending"
+                            ? "Pending"
+                            : "Active"
+                      }
+                    />
                   </td>
-                  <td className="px-4 py-3 text-right text-xs text-muted-foreground">
-                    Staff account
+                  <td className="px-4 py-3 text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() =>
+                            setRoleTarget({
+                              id: u.id,
+                              role: u.role === "admin" ? "partner" : "admin",
+                            })
+                          }
+                        >
+                          Change role
+                        </DropdownMenuItem>
+                        {u.accountStatus === "suspended" ? (
+                          <DropdownMenuItem
+                            onClick={() => {
+                              reactivateUser(u.id, user.name);
+                              toast.success(`${u.name} reactivated`);
+                            }}
+                          >
+                            Reinstate
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => {
+                              suspendUser(u.id, user.name);
+                              toast.warning(`${u.name} suspended`);
+                            }}
+                          >
+                            Suspend
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => setDeleteTarget(u.id)}
+                        >
+                          Deactivate account
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </td>
                 </tr>
               ))}
@@ -280,6 +333,33 @@ function UsersPage() {
               {TIERS.map((t) => (
                 <option key={t}>{t}</option>
               ))}
+            </select>
+          </label>
+        )}
+      </FormDialog>
+
+      <FormDialog
+        open={!!roleTarget}
+        onOpenChange={(b) => !b && setRoleTarget(null)}
+        title="Change user role"
+        submitLabel="Save role"
+        canSubmit={!!roleTarget}
+        onSubmit={() => {
+          changeUserRole(roleTarget!.id, roleTarget!.role, user.name);
+          toast.success(`Role updated to ${roleTarget!.role}`);
+          setRoleTarget(null);
+        }}
+      >
+        {roleTarget && (
+          <label className="text-xs">
+            Role
+            <select
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={roleTarget.role}
+              onChange={(e) => setRoleTarget({ ...roleTarget, role: e.target.value as InviteRole })}
+            >
+              <option value="admin">Admin</option>
+              <option value="partner">Sales Partner</option>
             </select>
           </label>
         )}
