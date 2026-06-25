@@ -33,7 +33,11 @@ function SubmitLead() {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitted, setSubmitted] = useState<{ id: string; duplicate: boolean } | null>(null);
+  const [submitted, setSubmitted] = useState<{
+    id: string;
+    duplicate: boolean;
+    duplicateReason?: string;
+  } | null>(null);
 
   if (user?.role !== "partner") return <Navigate to="/access-denied" />;
 
@@ -108,7 +112,7 @@ function SubmitLead() {
       if (lead.status !== "Duplicate Under Review")
         setOnboardingStep(user.partnerId!, "firstLead", true, user.name);
       const duplicate = lead.status === "Duplicate Under Review";
-      setSubmitted({ id: lead.id, duplicate });
+      setSubmitted({ id: lead.id, duplicate, duplicateReason: lead.duplicateReason });
       if (duplicate)
         toast.warning(`${lead.id} flagged as potential duplicate - sent to Admin for review.`);
       else toast.success(`${lead.id} submitted successfully and added to your pipeline.`);
@@ -139,6 +143,11 @@ function SubmitLead() {
                   Lead <strong>{submitted.id}</strong> matches an existing record. The Admin team
                   will review and notify you of the outcome.
                 </p>
+                {submitted.duplicateReason && (
+                  <p className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-warning-foreground">
+                    {submitted.duplicateReason}
+                  </p>
+                )}
               </>
             ) : (
               <>

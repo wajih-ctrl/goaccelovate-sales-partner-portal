@@ -5,6 +5,7 @@ import { useAuth } from "./auth";
 import { buildStoragePath, STORAGE_BUCKETS, validateUploadFile } from "./file-upload";
 import type { Json } from "./database.types";
 import { isSupabaseConfigured, supabase } from "./supabase";
+import { isAnnouncementTargeted } from "./announcements";
 import {
   DEMO_USERS,
   PARTNERS as INITIAL_PARTNERS,
@@ -363,6 +364,7 @@ function mapLead(row: any): Lead {
     createdAt: row.created_at,
     lastActivity: row.last_activity_at,
     confirmedValue: row.confirmed_value == null ? undefined : Number(row.confirmed_value),
+    duplicateReason: row.duplicate_reason || undefined,
   };
 }
 
@@ -929,12 +931,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
   };
 
-  const notify = (n: Omit<Notification, "id" | "date" | "read">) =>
+  const persistCurrentNotification = (n: Omit<Notification, "id" | "date" | "read">) => {
+    if (!realMode || !supabase || !user?.id || user.role === "partner") return;
+    void supabase
+      .from("notifications")
+      .insert({
+        recipient_id: user.id,
+        title: n.title,
+        body: n.body,
+        type: n.type,
+        mandatory: Boolean(n.mandatory),
+      })
+      .then(({ error }) => {
+        if (error) handleWriteError(error);
+      });
+  };
+
+  const notify = (
+    n: Omit<Notification, "id" | "date" | "read">,
+    options: { persist?: boolean } = {},
+  ) => {
     setNotifications((ns) => [{ ...n, id: uid("N"), date: nowIso(), read: false }, ...ns]);
+    if (options.persist !== false) persistCurrentNotification(n);
+  };
 
   const notifyPartner = useCallback(
     async (partnerId: string, payload: Omit<Notification, "id" | "date" | "read">) => {
-      notify(payload);
+      notify(payload, { persist: false });
       if (!realMode || !supabase) return;
       const { error } = await supabase.from("notifications").insert({
         partner_id: partnerId,
@@ -1073,11 +1096,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           .eq("id", id)
           .then(({ error }: { error: unknown }) => {
             if (error) handleWriteError(error);
+            if (!error && existing && stage !== "Closed Won") {
+              void notifyPartner(existing.partnerId, {
+                title: "Lead stage updated",
+                body: `${existing.company} moved to ${stage}.${reason ? ` Reason: ${reason}` : ""}`,
+                type: stage === "Closed Lost" ? "warning" : "info",
+              });
+            }
             reloadAfterWrite();
           });
       }
     },
-    [commissions, handleWriteError, leads, partners, realMode, reloadAfterWrite],
+    [commissions, handleWriteError, leads, notifyPartner, partners, realMode, reloadAfterWrite],
   );
 
   const updateLeadStatus: AppActions["updateLeadStatus"] = useCallback(
@@ -1117,11 +1147,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           .eq("id", id)
           .then(({ error }: { error: unknown }) => {
             if (error) handleWriteError(error);
+            const lead = leads.find((item) => item.id === id);
+            if (!error && lead) {
+              void notifyPartner(lead.partnerId, {
+                title: "Lead status updated",
+                body: `${lead.company} status changed to ${status}.${reason ? ` Reason: ${reason}` : ""}`,
+                type:
+                  status === "Closed Lost" ||
+                  status === "Duplicate Rejected" ||
+                  status === "Disqualified"
+                    ? "warning"
+                    : "info",
+              });
+            }
             reloadAfterWrite();
           });
       }
     },
-    [handleWriteError, realMode, reloadAfterWrite],
+    [handleWriteError, leads, notifyPartner, realMode, reloadAfterWrite],
   );
 
   const closeLeadWon: AppActions["closeLeadWon"] = useCallback(
@@ -1251,23 +1294,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  const addComment: AppActions["addComment"] = useCallback((leadId, text, actor, isPrivate) => {
-    pushActivity({
-      leadId,
-      type: isPrivate ? "admin_note" : "comment",
-      user: actor,
-      text,
-      private: isPrivate,
-    });
-    setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, lastActivity: nowIso() } : l)));
-    if (!isPrivate) {
-      notify({
-        title: "New lead comment",
-        body: `${leadId} · ${actor}: ${text.slice(0, 80)}`,
-        type: "info",
+  const addComment: AppActions["addComment"] = useCallback(
+    (leadId, text, actor, isPrivate) => {
+      const lead = leads.find((item) => item.id === leadId);
+      pushActivity({
+        leadId,
+        type: isPrivate ? "admin_note" : "comment",
+        user: actor,
+        text,
+        private: isPrivate,
       });
-    }
-  }, []);
+      setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, lastActivity: nowIso() } : l)));
+      if (!isPrivate) {
+        notify({
+          title: "New lead comment",
+          body: `${leadId} - ${actor}: ${text.slice(0, 80)}`,
+          type: "info",
+        });
+        if (realMode && lead) {
+          void notifyPartner(lead.partnerId, {
+            title: "New lead comment",
+            body: `${lead.company}: ${text.slice(0, 160)}`,
+            type: "info",
+          });
+        }
+      }
+    },
+    [leads, notifyPartner, realMode],
+  );
 
   const addAttachment: AppActions["addAttachment"] = useCallback(
     async (leadId, file, actor, isPrivate = false) => {
@@ -1302,6 +1356,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return false;
         }
 
+        if (!isPrivate) {
+          const lead = leads.find((item) => item.id === leadId);
+          if (lead) {
+            await notifyPartner(lead.partnerId, {
+              title: "New lead attachment",
+              body: `${file.name} was uploaded for ${lead.company}.`,
+              type: "info",
+            });
+          }
+        }
         toast.success(`${file.name} uploaded`);
         reloadAfterWrite();
         return true;
@@ -1324,7 +1388,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toast.success(`${file.name} uploaded`);
       return true;
     },
-    [handleWriteError, realMode, reloadAfterWrite, user?.id],
+    [handleWriteError, leads, notifyPartner, realMode, reloadAfterWrite, user?.id],
   );
 
   const approveDuplicate: AppActions["approveDuplicate"] = useCallback(
@@ -1354,17 +1418,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         type: "success",
       });
       if (realMode && supabase) {
+        const lead = leads.find((item) => item.id === leadId);
         void (supabase.rpc as any)("review_duplicate_lead", {
           lead_id: leadId,
           allow_duplicate: true,
           reason,
         }).then(({ error }: { error: unknown }) => {
           if (error) handleWriteError(error);
+          if (!error && lead) {
+            void notifyPartner(lead.partnerId, {
+              title: "Duplicate review complete",
+              body: `${lead.company} was accepted into the pipeline. Reason: ${reason}`,
+              type: "success",
+              mandatory: true,
+            });
+          }
           reloadAfterWrite();
         });
       }
     },
-    [handleWriteError, realMode, reloadAfterWrite, user?.id],
+    [handleWriteError, leads, notifyPartner, realMode, reloadAfterWrite, user?.id],
   );
 
   const rejectDuplicate: AppActions["rejectDuplicate"] = useCallback(
@@ -1387,17 +1460,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         type: "warning",
       });
       if (realMode && supabase) {
+        const lead = leads.find((item) => item.id === leadId);
         void (supabase.rpc as any)("review_duplicate_lead", {
           lead_id: leadId,
           allow_duplicate: false,
           reason,
         }).then(({ error }: { error: unknown }) => {
           if (error) handleWriteError(error);
+          if (!error && lead) {
+            void notifyPartner(lead.partnerId, {
+              title: "Lead rejected as duplicate",
+              body: `${lead.company} was rejected as duplicate. Reason: ${reason}`,
+              type: "warning",
+              mandatory: true,
+            });
+          }
           reloadAfterWrite();
         });
       }
     },
-    [handleWriteError, realMode, reloadAfterWrite, user?.id],
+    [handleWriteError, leads, notifyPartner, realMode, reloadAfterWrite, user?.id],
   );
 
   const addCall: AppActions["addCall"] = useCallback(
@@ -1487,6 +1569,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }
 
+        if (!c.private) {
+          const lead = leads.find((item) => item.id === c.leadId);
+          if (lead) {
+            await notifyPartner(lead.partnerId, {
+              title: "Discovery call logged",
+              body: `${lead.company}: ${c.summary || "A discovery call was logged."}`,
+              type: "info",
+            });
+          }
+        }
         toast.success("Discovery call logged");
         reloadAfterWrite();
         return true;
@@ -1495,7 +1587,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toast.success("Discovery call logged");
       return true;
     },
-    [handleWriteError, realMode, reloadAfterWrite, user?.id],
+    [handleWriteError, leads, notifyPartner, realMode, reloadAfterWrite, user?.id],
   );
 
   const downloadStoredFile: AppActions["downloadStoredFile"] = useCallback(
@@ -1544,6 +1636,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               .eq("id", id)
               .then(({ error }) => {
                 if (error) handleWriteError(error);
+                if (!error) {
+                  void notifyPartner(c.partnerId, {
+                    title: "Commission rate updated",
+                    body: `${id} changed from ${c.rate}% to ${rate}%. Reason: ${reason}`,
+                    type: "info",
+                    mandatory: true,
+                  });
+                }
                 reloadAfterWrite();
               });
           }
@@ -1551,7 +1651,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
       );
     },
-    [handleWriteError, leads, realMode, reloadAfterWrite],
+    [handleWriteError, leads, notifyPartner, realMode, reloadAfterWrite],
   );
 
   const addManualCommission: AppActions["addManualCommission"] = useCallback(
@@ -1599,11 +1699,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           })
           .then(({ error }) => {
             if (error) handleWriteError(error);
+            if (!error) {
+              void notifyPartner(payload.partnerId, {
+                title: "Commission added",
+                body: `${payload.label} - $${payload.amount.toLocaleString()}`,
+                type: "success",
+                mandatory: true,
+              });
+            }
             reloadAfterWrite();
           });
       }
     },
-    [handleWriteError, realMode, reloadAfterWrite, user?.id],
+    [handleWriteError, notifyPartner, realMode, reloadAfterWrite, user?.id],
   );
 
   const setCommissionState: AppActions["setCommissionState"] = useCallback(
@@ -1623,17 +1731,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
       );
       if (realMode && supabase) {
+        const commission = commissions.find((item) => item.id === id);
         void supabase
           .from("commissions")
           .update({ state })
           .eq("id", id)
           .then(({ error }) => {
             if (error) handleWriteError(error);
+            if (!error && commission) {
+              void notifyPartner(commission.partnerId, {
+                title: "Commission status updated",
+                body: `${id} is now ${state}.`,
+                type: state === "Paid" || state === "Approved" ? "success" : "info",
+                mandatory: state === "Paid" || state === "Waived",
+              });
+            }
             reloadAfterWrite();
           });
       }
     },
-    [handleWriteError, realMode, reloadAfterWrite],
+    [commissions, handleWriteError, notifyPartner, realMode, reloadAfterWrite],
   );
 
   const waiveCommission: AppActions["waiveCommission"] = useCallback(
@@ -1654,17 +1771,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
       );
       if (realMode && supabase) {
+        const commission = commissions.find((item) => item.id === id);
         void supabase
           .from("commissions")
           .update({ state: "Waived", waived_reason: reason })
           .eq("id", id)
           .then(({ error }) => {
             if (error) handleWriteError(error);
+            if (!error && commission) {
+              void notifyPartner(commission.partnerId, {
+                title: "Commission waived",
+                body: `${id}: ${reason}`,
+                type: "warning",
+                mandatory: true,
+              });
+            }
             reloadAfterWrite();
           });
       }
     },
-    [handleWriteError, realMode, reloadAfterWrite],
+    [commissions, handleWriteError, notifyPartner, realMode, reloadAfterWrite],
   );
 
   const openDispute: AppActions["openDispute"] = useCallback(
@@ -2114,9 +2240,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       notify({ title: "New announcement", body: a.title, type: "info" });
       if (realMode && supabase) {
         const target = announcementTarget(a.target, partners);
-        void supabase
-          .from("announcements")
-          .insert({
+        const targetedPartners = partners.filter((partner) =>
+          isAnnouncementTargeted(item, partner),
+        );
+        void (async () => {
+          const { error: announcementError } = await supabase.from("announcements").insert({
             title: a.title,
             body: a.body,
             priority: a.priority,
@@ -2124,11 +2252,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             target_rules: target.target_rules,
             send_email: Boolean((a as any).sendEmail),
             published_by: user?.id || null,
-          })
-          .then(({ error }) => {
-            if (error) handleWriteError(error);
-            reloadAfterWrite();
           });
+          if (announcementError) {
+            handleWriteError(announcementError);
+            reloadAfterWrite();
+            return;
+          }
+
+          if (targetedPartners.length > 0) {
+            const { error: notificationError } = await supabase.from("notifications").insert(
+              targetedPartners.map((partner) => ({
+                partner_id: partner.id,
+                title: "New announcement",
+                body: `${a.priority}: ${a.title}`,
+                type: a.priority === "Urgent" ? "warning" : "info",
+                mandatory: a.priority === "Urgent",
+              })),
+            );
+            if (notificationError) handleWriteError(notificationError);
+          }
+          reloadAfterWrite();
+        })();
       }
     },
     [handleWriteError, partners, realMode, reloadAfterWrite, user?.id],

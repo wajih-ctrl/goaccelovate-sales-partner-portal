@@ -70,6 +70,7 @@ export interface Lead {
   createdAt: string;
   lastActivity: string;
   confirmedValue?: number;
+  duplicateReason?: string;
 }
 
 export interface Commission {
