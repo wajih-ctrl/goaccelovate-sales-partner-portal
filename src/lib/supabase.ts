@@ -18,7 +18,27 @@ export const supabase = isSupabaseConfigured
     })
   : null;
 
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+function normalizePublicUrl(value: string | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return "";
+  return trimTrailingSlash(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+}
+
 export function getAuthRedirectUrl(path = "/login") {
-  if (typeof window === "undefined") return `http://127.0.0.1:5173${path}`;
-  return `${window.location.origin}${path}`;
+  const envOrigin =
+    normalizePublicUrl(import.meta.env.VITE_APP_URL) ||
+    normalizePublicUrl(import.meta.env.VITE_VERCEL_PROJECT_PRODUCTION_URL) ||
+    normalizePublicUrl(import.meta.env.VITE_VERCEL_URL);
+
+  if (typeof window === "undefined") {
+    return `${envOrigin || "http://127.0.0.1:5173"}${path}`;
+  }
+
+  const origin = window.location.origin;
+  const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+  return `${isLocalhost && envOrigin ? envOrigin : origin}${path}`;
 }

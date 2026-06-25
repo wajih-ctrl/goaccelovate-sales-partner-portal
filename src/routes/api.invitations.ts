@@ -14,8 +14,20 @@ type RevokePayload = {
   id?: string;
 };
 
+function normalizePublicUrl(value: string | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return "";
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return withProtocol.replace(/\/+$/, "");
+}
+
 const appUrl = () =>
-  process.env.APP_URL || process.env.VITE_APP_URL || process.env.URL || "http://127.0.0.1:5173";
+  normalizePublicUrl(process.env.APP_URL) ||
+  normalizePublicUrl(process.env.VITE_APP_URL) ||
+  normalizePublicUrl(process.env.VERCEL_PROJECT_PRODUCTION_URL) ||
+  normalizePublicUrl(process.env.VERCEL_URL) ||
+  normalizePublicUrl(process.env.URL) ||
+  "http://127.0.0.1:5173";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
