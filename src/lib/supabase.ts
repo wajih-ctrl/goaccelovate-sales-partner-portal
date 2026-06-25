@@ -35,10 +35,16 @@ export function getAuthRedirectUrl(path = "/login") {
     normalizePublicUrl(import.meta.env.VITE_VERCEL_URL);
 
   if (typeof window === "undefined") {
-    return `${envOrigin || "http://127.0.0.1:5173"}${path}`;
+    const serverFallback =
+      normalizePublicUrl(import.meta.env.VITE_VERCEL_PROJECT_PRODUCTION_URL) ||
+      normalizePublicUrl(import.meta.env.VITE_VERCEL_URL) ||
+      normalizePublicUrl(import.meta.env.VITE_APP_URL);
+
+    return `${envOrigin || serverFallback || "https://goaccelovate-sales-partner-portal.vercel.app"}${path}`;
   }
 
   const origin = window.location.origin;
   const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
-  return `${isLocalhost && envOrigin ? envOrigin : origin}${path}`;
+  const redirectOrigin = isLocalhost && envOrigin ? envOrigin : origin;
+  return `${redirectOrigin}${path}`;
 }

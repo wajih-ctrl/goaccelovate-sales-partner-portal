@@ -27,7 +27,7 @@ const appUrl = () =>
   normalizePublicUrl(process.env.VERCEL_PROJECT_PRODUCTION_URL) ||
   normalizePublicUrl(process.env.VERCEL_URL) ||
   normalizePublicUrl(process.env.URL) ||
-  "http://127.0.0.1:5173";
+  "https://goaccelovate-sales-partner-portal.vercel.app";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
