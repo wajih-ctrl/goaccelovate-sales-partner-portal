@@ -29,6 +29,7 @@ import {
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
+  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -109,11 +110,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+  const [selectedNotificationId, setSelectedNotificationId] = useState<string | null>(null);
 
   const { notifications, markNotificationRead, markAllNotificationsRead } = useStore();
   if (!user) return null;
   const nav = getNav(user.role);
   const unread = notifications.filter((n) => !n.read).length;
+  const selectedNotification =
+    notifications.find((notification) => notification.id === selectedNotificationId) || null;
   const handleSignOut = async () => {
     await logout();
     navigate({ to: "/login", replace: true });
@@ -269,7 +273,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
           </form>
           <div className="ml-auto flex min-w-0 items-center gap-2">
-            <Popover>
+            <Popover onOpenChange={(open) => !open && setSelectedNotificationId(null)}>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative shrink-0">
                   <Bell className="h-5 w-5" />
@@ -281,42 +285,105 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-[calc(100vw-1rem)] max-w-96 p-0">
-                <div className="flex items-center justify-between border-b px-4 py-3">
-                  <div className="text-sm font-semibold">Notifications</div>
-                  {unread > 0 && (
-                    <button
-                      onClick={markAllNotificationsRead}
-                      className="text-xs text-brand hover:underline"
-                    >
-                      Mark all read
-                    </button>
-                  )}
-                </div>
-                <div className="max-h-96 overflow-y-auto">
-                  {notifications.length === 0 && (
-                    <div className="p-6 text-center text-sm text-muted-foreground">
-                      No notifications.
-                    </div>
-                  )}
-                  {notifications.map((n) => (
-                    <button
-                      key={n.id}
-                      onClick={() => markNotificationRead(n.id)}
-                      className={`w-full border-b p-3 text-left text-sm last:border-b-0 hover:bg-accent/30 ${!n.read ? "bg-accent/40" : ""}`}
-                    >
-                      <div className="font-medium">{n.title}</div>
-                      <div className="text-xs text-muted-foreground">{n.body}</div>
-                      <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                        <span>{new Date(n.date).toLocaleString()}</span>
-                        {n.mandatory && (
-                          <span className="rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-warning-foreground">
-                            Mandatory
-                          </span>
-                        )}
+                {selectedNotification ? (
+                  <>
+                    <div className="flex items-center gap-2 border-b px-3 py-3">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => setSelectedNotificationId(null)}
+                        aria-label="Back to notifications"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                      </Button>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold">Notification details</div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(selectedNotification.date).toLocaleString()}
+                        </div>
                       </div>
-                    </button>
-                  ))}
-                </div>
+                    </div>
+                    <div className="max-h-96 space-y-4 overflow-y-auto p-4 text-sm">
+                      <div>
+                        <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Title
+                        </div>
+                        <div className="mt-1 text-base font-semibold">
+                          {selectedNotification.title}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Full message
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
+                          {selectedNotification.body}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 rounded-md border bg-accent/20 p-3 text-xs">
+                        <div>
+                          <div className="font-medium text-muted-foreground">Status</div>
+                          <div>{selectedNotification.read ? "Read" : "Unread"}</div>
+                        </div>
+                        <div>
+                          <div className="font-medium text-muted-foreground">Priority</div>
+                          <div>{selectedNotification.mandatory ? "Mandatory" : "Standard"}</div>
+                        </div>
+                        <div>
+                          <div className="font-medium text-muted-foreground">Type</div>
+                          <div className="capitalize">{selectedNotification.type}</div>
+                        </div>
+                        <div>
+                          <div className="font-medium text-muted-foreground">Notification ID</div>
+                          <div className="break-all">{selectedNotification.id}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between border-b px-4 py-3">
+                      <div className="text-sm font-semibold">Notifications</div>
+                      {unread > 0 && (
+                        <button
+                          onClick={markAllNotificationsRead}
+                          className="text-xs text-brand hover:underline"
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {notifications.length === 0 && (
+                        <div className="p-6 text-center text-sm text-muted-foreground">
+                          No notifications.
+                        </div>
+                      )}
+                      {notifications.map((n) => (
+                        <button
+                          key={n.id}
+                          onClick={() => {
+                            markNotificationRead(n.id);
+                            setSelectedNotificationId(n.id);
+                          }}
+                          className={`w-full border-b p-3 text-left text-sm last:border-b-0 hover:bg-accent/30 ${!n.read ? "bg-accent/40" : ""}`}
+                        >
+                          <div className="font-medium">{n.title}</div>
+                          <div className="line-clamp-2 text-xs text-muted-foreground">{n.body}</div>
+                          <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <span>{new Date(n.date).toLocaleString()}</span>
+                            {n.mandatory && (
+                              <span className="rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-warning-foreground">
+                                Mandatory
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </PopoverContent>
             </Popover>
             <DropdownMenu>
