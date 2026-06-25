@@ -13,7 +13,10 @@ export const Route = createFileRoute("/_app/profile")({ component: Profile });
 function Profile() {
   const { user } = useAuth();
   const { partners, partnerDocuments, updatePartnerProfile, downloadStoredFile } = useStore();
-  const partner = partners.find((item) => item.id === user?.partnerId);
+  const userEmail = user?.email?.toLowerCase();
+  const partner = partners.find(
+    (item) => item.id === user?.partnerId || item.email.toLowerCase() === userEmail,
+  );
   const fallbackPartner: Partner = partner || {
     id: "",
     name: "",
@@ -35,7 +38,26 @@ function Profile() {
     if (partner) setP(partner);
   }, [partner]);
   if (user?.role !== "partner") return <Navigate to="/access-denied" />;
-  if (!partner) return <Navigate to="/dashboard" />;
+  if (!partner) {
+    return (
+      <>
+        <PageHeader
+          title="My Profile"
+          description="Your partner profile is still being connected."
+        />
+        <PageContainer>
+          <Card className="p-5">
+            <h2 className="font-semibold">Profile setup pending</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Your account is signed in as a Sales Partner, but the partner profile record is not
+              linked yet. Please contact your GoAccelovate account manager so they can finish the
+              profile setup.
+            </p>
+          </Card>
+        </PageContainer>
+      </>
+    );
+  }
 
   const save = () => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email)) {

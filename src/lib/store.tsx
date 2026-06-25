@@ -188,9 +188,17 @@ interface AppActions {
   markAllNotificationsRead: () => void;
   // Users
   inviteUser: (
-    payload: { name: string; email: string; role: "admin" | "partner"; tier?: string },
+    payload: {
+      id?: string;
+      name: string;
+      email: string;
+      role: "admin" | "partner";
+      tier?: string;
+      invitedDate?: string;
+    },
     actor: string,
   ) => void;
+  revokeInvitation: (id: string, actor: string) => void;
   suspendUser: (id: string, actor: string) => void;
   reactivateUser: (id: string, actor: string) => void;
   deleteUser: (id: string, actor: string) => void;
@@ -2183,8 +2191,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const inviteUser: AppActions["inviteUser"] = useCallback((payload, actor) => {
     const item: InvitedUser = {
       ...payload,
-      id: uid("INV"),
-      invitedDate: nowIso(),
+      id: payload.id || uid("INV"),
+      invitedDate: payload.invitedDate || nowIso(),
       status: "Invited",
     };
     setInvites((prev) => [item, ...prev]);
@@ -2200,6 +2208,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       type: "info",
       mandatory: true,
     });
+  }, []);
+
+  const revokeInvitation: AppActions["revokeInvitation"] = useCallback((id, actor) => {
+    setInvites((prev) => prev.filter((i) => i.id !== id));
+    pushAudit({ user: actor, action: "Invitation Revoked", module: "Users", details: id });
+    notify({ title: "Invitation revoked", body: id, type: "warning", mandatory: true });
   }, []);
 
   const suspendUser: AppActions["suspendUser"] = useCallback(
@@ -2649,6 +2663,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     markNotificationRead,
     markAllNotificationsRead,
     inviteUser,
+    revokeInvitation,
     suspendUser,
     reactivateUser,
     deleteUser,

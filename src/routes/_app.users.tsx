@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useState } from "react";
 import { FormDialog, ReasonDialog } from "@/components/common/dialogs";
-import { sendRealInvitation } from "@/lib/real-invitations";
+import { revokeRealInvitation, sendRealInvitation } from "@/lib/real-invitations";
 
 export const Route = createFileRoute("/_app/users")({ component: UsersPage });
 
@@ -32,6 +32,7 @@ function UsersPage() {
     invites,
     settings,
     inviteUser,
+    revokeInvitation,
     suspendUser,
     reactivateUser,
     deleteUser,
@@ -48,6 +49,7 @@ function UsersPage() {
     tier: "Associate" as InviteTier,
   });
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
   const [tierTarget, setTierTarget] = useState<{ id: string; tier: string } | null>(null);
   const [rateTarget, setRateTarget] = useState<{ id: string; rate: string } | null>(null);
   const [roleTarget, setRoleTarget] = useState<{ id: string; role: InviteRole } | null>(null);
@@ -98,12 +100,23 @@ function UsersPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => {
-                          deleteUser(i.id, user.name);
+                        disabled={revokingInviteId === i.id}
+                        onClick={async () => {
+                          setRevokingInviteId(i.id);
+                          const result =
+                            authMode === "supabase" ? await revokeRealInvitation(i.id) : {};
+                          setRevokingInviteId(null);
+
+                          if (result.error) {
+                            toast.error(result.error);
+                            return;
+                          }
+
+                          revokeInvitation(i.id, user.name);
                           toast.warning("Invitation revoked");
                         }}
                       >
-                        Revoke
+                        {revokingInviteId === i.id ? "Revoking..." : "Revoke"}
                       </Button>
                     </td>
                   </tr>
@@ -288,7 +301,14 @@ function UsersPage() {
             return;
           }
 
-          inviteUser(payload, user.name);
+          inviteUser(
+            {
+              ...payload,
+              id: result.invitationId,
+              invitedDate: result.createdAt,
+            },
+            user.name,
+          );
           toast.success(`Invitation sent to ${invite.email}`);
           setShowInvite(false);
           setInvite({ name: "", email: "", role: "partner", tier: "Associate" });

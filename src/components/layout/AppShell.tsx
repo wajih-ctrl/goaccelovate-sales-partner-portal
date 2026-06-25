@@ -114,6 +114,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!user) return null;
   const nav = getNav(user.role);
   const unread = notifications.filter((n) => !n.read).length;
+  const handleSignOut = async () => {
+    await logout();
+    navigate({ to: "/login", replace: true });
+  };
 
   const renderSidebar = (mode: "desktop" | "mobile") => {
     const collapsed = mode === "desktop" && desktopCollapsed;
@@ -167,8 +171,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
           <ul className="space-y-0.5">
             {nav.map((item) => {
-              const active =
-                pathname === item.to || (item.to !== "/dashboard" && pathname.startsWith(item.to));
+              const active = pathname === item.to || pathname.startsWith(`${item.to}/`);
               const Icon = item.icon;
               return (
                 <li key={item.to}>
@@ -345,12 +348,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     My Profile
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem
-                  onClick={() => {
-                    logout();
-                    navigate({ to: "/login" });
-                  }}
-                >
+                <DropdownMenuItem onClick={handleSignOut}>
                   <LogOut className="mr-2 h-4 w-4" />
                   Sign out
                 </DropdownMenuItem>

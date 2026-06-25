@@ -55,6 +55,20 @@ async function expectError(label, promise) {
   if (!error) throw new Error(`${label}: expected RLS error`);
 }
 
+async function expectNoMutation(label, before, mutationPromise, afterPromise, field) {
+  const { data, error } = await mutationPromise;
+  if (error) return;
+  if (data && data.length > 0) {
+    throw new Error(`${label}: mutation returned ${data.length} row(s)`);
+  }
+  const { data: after, error: afterError } = await afterPromise;
+  if (afterError) throw new Error(`${label}: unable to verify row after mutation`);
+  const afterRow = Array.isArray(after) ? after[0] : after;
+  if (afterRow?.[field] !== before?.[field]) {
+    throw new Error(`${label}: ${field} changed from ${before?.[field]} to ${afterRow?.[field]}`);
+  }
+}
+
 async function main() {
   const partnerA = await signIn("partnerA");
   const partnerB = await signIn("partnerB");
@@ -93,27 +107,52 @@ async function main() {
     partnerA.from("audit_log").select("id").limit(1),
   );
 
-  const { data: ownLead } = await partnerA.from("leads").select("id").limit(1).maybeSingle();
+  const { data: ownLead } = await partnerA
+    .from("leads")
+    .select("id,stage,status")
+    .limit(1)
+    .maybeSingle();
   if (ownLead?.id) {
-    await expectError(
+    await expectNoMutation(
       "Partner cannot update lead stage",
-      partnerA.from("leads").update({ stage: "Proposal Sent" }).eq("id", ownLead.id),
+      ownLead,
+      partnerA
+        .from("leads")
+        .update({ stage: "Proposal Sent" })
+        .eq("id", ownLead.id)
+        .select("id,stage"),
+      partnerA.from("leads").select("id,stage").eq("id", ownLead.id),
+      "stage",
     );
-    await expectError(
+    await expectNoMutation(
       "Partner cannot update lead status",
-      partnerA.from("leads").update({ status: "Closed Won" }).eq("id", ownLead.id),
+      ownLead,
+      partnerA
+        .from("leads")
+        .update({ status: "Closed Won" })
+        .eq("id", ownLead.id)
+        .select("id,status"),
+      partnerA.from("leads").select("id,status").eq("id", ownLead.id),
+      "status",
     );
   }
 
   const { data: ownCommission } = await partnerA
     .from("commissions")
-    .select("id")
+    .select("id,state")
     .limit(1)
     .maybeSingle();
   if (ownCommission?.id) {
-    await expectError(
+    await expectNoMutation(
       "Partner cannot update commission fields",
-      partnerA.from("commissions").update({ state: "Paid" }).eq("id", ownCommission.id),
+      ownCommission,
+      partnerA
+        .from("commissions")
+        .update({ state: "Paid" })
+        .eq("id", ownCommission.id)
+        .select("id,state"),
+      partnerA.from("commissions").select("id,state").eq("id", ownCommission.id),
+      "state",
     );
   }
 
