@@ -75,54 +75,56 @@ function UsersPage() {
             <div className="border-b bg-accent/40 px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Pending invitations ({invites.length})
             </div>
-            <table className="w-full text-sm">
-              <tbody>
-                {invites.map((i) => (
-                  <tr key={i.id} className="border-t">
-                    <td className="px-4 py-3 font-medium">{i.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{i.email}</td>
-                    <td className="px-4 py-3 capitalize">
-                      {i.role}
-                      {i.tier ? ` · ${i.tier}` : ""}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      Sent {new Date(i.invitedDate).toLocaleDateString()} · expires in{" "}
-                      {settings.invitationExpiry}h
-                    </td>
-                    <td className="px-4 py-3 text-right space-x-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => toast.success(`Invitation resent to ${i.email}`)}
-                      >
-                        Resend
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={revokingInviteId === i.id}
-                        onClick={async () => {
-                          setRevokingInviteId(i.id);
-                          const result =
-                            authMode === "supabase" ? await revokeRealInvitation(i.id) : {};
-                          setRevokingInviteId(null);
+            <div className="responsive-table-scroll">
+              <table className="min-w-[760px] w-full text-sm whitespace-nowrap">
+                <tbody>
+                  {invites.map((i) => (
+                    <tr key={i.id} className="border-t">
+                      <td className="px-4 py-3 font-medium">{i.name}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{i.email}</td>
+                      <td className="px-4 py-3 capitalize">
+                        {i.role}
+                        {i.tier ? ` · ${i.tier}` : ""}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        Sent {new Date(i.invitedDate).toLocaleDateString()} · expires in{" "}
+                        {settings.invitationExpiry}h
+                      </td>
+                      <td className="px-4 py-3 text-right space-x-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => toast.success(`Invitation resent to ${i.email}`)}
+                        >
+                          Resend
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={revokingInviteId === i.id}
+                          onClick={async () => {
+                            setRevokingInviteId(i.id);
+                            const result =
+                              authMode === "supabase" ? await revokeRealInvitation(i.id) : {};
+                            setRevokingInviteId(null);
 
-                          if (result.error) {
-                            toast.error(result.error);
-                            return;
-                          }
+                            if (result.error) {
+                              toast.error(result.error);
+                              return;
+                            }
 
-                          revokeInvitation(i.id, user.name);
-                          toast.warning("Invitation revoked");
-                        }}
-                      >
-                        {revokingInviteId === i.id ? "Revoking..." : "Revoke"}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                            revokeInvitation(i.id, user.name);
+                            toast.warning("Invitation revoked");
+                          }}
+                        >
+                          {revokingInviteId === i.id ? "Revoking..." : "Revoke"}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Card>
         )}
 
@@ -130,148 +132,152 @@ function UsersPage() {
           <div className="border-b bg-accent/40 px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Active accounts
           </div>
-          <table className="w-full text-sm">
-            <thead className="text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 text-left">Name</th>
-                <th className="px-4 py-3 text-left">Email</th>
-                <th className="px-4 py-3 text-left">Role</th>
-                <th className="px-4 py-3 text-left">Tier</th>
-                <th className="px-4 py-3 text-right">Rate</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {staffUsers.map((u) => (
-                <tr key={u.id} className="border-t hover:bg-accent/20">
-                  <td className="px-4 py-3 font-medium">{u.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
-                  <td className="px-4 py-3 capitalize">{u.role.replace("_", " ")}</td>
-                  <td className="px-4 py-3 text-muted-foreground">—</td>
-                  <td className="px-4 py-3 text-right text-muted-foreground">—</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge
-                      status={
-                        u.accountStatus === "suspended"
-                          ? "Suspended"
-                          : u.accountStatus === "pending"
-                            ? "Pending"
-                            : "Active"
-                      }
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() =>
-                            setRoleTarget({
-                              id: u.id,
-                              role: u.role === "admin" ? "partner" : "admin",
-                            })
-                          }
-                        >
-                          Change role
-                        </DropdownMenuItem>
-                        {u.accountStatus === "suspended" ? (
-                          <DropdownMenuItem
-                            onClick={() => {
-                              reactivateUser(u.id, user.name);
-                              toast.success(`${u.name} reactivated`);
-                            }}
-                          >
-                            Reinstate
-                          </DropdownMenuItem>
-                        ) : (
-                          <DropdownMenuItem
-                            onClick={() => {
-                              suspendUser(u.id, user.name);
-                              toast.warning(`${u.name} suspended`);
-                            }}
-                          >
-                            Suspend
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => setDeleteTarget(u.id)}
-                        >
-                          Deactivate account
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
+          <div className="responsive-table-scroll">
+            <table className="min-w-[860px] w-full text-sm whitespace-nowrap">
+              <thead className="text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left">Name</th>
+                  <th className="px-4 py-3 text-left">Email</th>
+                  <th className="px-4 py-3 text-left">Role</th>
+                  <th className="px-4 py-3 text-left">Tier</th>
+                  <th className="px-4 py-3 text-right">Rate</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3"></th>
                 </tr>
-              ))}
-              {partners.map((p) => (
-                <tr key={p.id} className="border-t hover:bg-accent/20">
-                  <td className="px-4 py-3 font-medium">{p.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{p.email}</td>
-                  <td className="px-4 py-3">Sales Partner</td>
-                  <td className="px-4 py-3">
-                    <TierBadge tier={p.tier} />
-                  </td>
-                  <td className="px-4 py-3 text-right">{p.commissionRate}%</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={p.status} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setTierTarget({ id: p.id, tier: p.tier })}>
-                          Change tier
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() =>
-                            setRateTarget({ id: p.id, rate: String(p.commissionRate) })
-                          }
-                        >
-                          Set commission rate
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        {p.status === "Active" ? (
+              </thead>
+              <tbody>
+                {staffUsers.map((u) => (
+                  <tr key={u.id} className="border-t hover:bg-accent/20">
+                    <td className="px-4 py-3 font-medium">{u.name}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
+                    <td className="px-4 py-3 capitalize">{u.role.replace("_", " ")}</td>
+                    <td className="px-4 py-3 text-muted-foreground">—</td>
+                    <td className="px-4 py-3 text-right text-muted-foreground">—</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge
+                        status={
+                          u.accountStatus === "suspended"
+                            ? "Suspended"
+                            : u.accountStatus === "pending"
+                              ? "Pending"
+                              : "Active"
+                        }
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => {
-                              suspendUser(p.id, user.name);
-                              toast.warning(`${p.name} suspended`);
-                            }}
+                            onClick={() =>
+                              setRoleTarget({
+                                id: u.id,
+                                role: u.role === "admin" ? "partner" : "admin",
+                              })
+                            }
                           >
-                            Suspend
+                            Change role
                           </DropdownMenuItem>
-                        ) : (
+                          {u.accountStatus === "suspended" ? (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                reactivateUser(u.id, user.name);
+                                toast.success(`${u.name} reactivated`);
+                              }}
+                            >
+                              Reinstate
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                suspendUser(u.id, user.name);
+                                toast.warning(`${u.name} suspended`);
+                              }}
+                            >
+                              Suspend
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
-                            onClick={() => {
-                              reactivateUser(p.id, user.name);
-                              toast.success(`${p.name} reactivated`);
-                            }}
+                            className="text-destructive"
+                            onClick={() => setDeleteTarget(u.id)}
                           >
-                            Reactivate
+                            Deactivate account
                           </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => setDeleteTarget(p.id)}
-                        >
-                          Delete account
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                ))}
+                {partners.map((p) => (
+                  <tr key={p.id} className="border-t hover:bg-accent/20">
+                    <td className="px-4 py-3 font-medium">{p.name}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{p.email}</td>
+                    <td className="px-4 py-3">Sales Partner</td>
+                    <td className="px-4 py-3">
+                      <TierBadge tier={p.tier} />
+                    </td>
+                    <td className="px-4 py-3 text-right">{p.commissionRate}%</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={p.status} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => setTierTarget({ id: p.id, tier: p.tier })}
+                          >
+                            Change tier
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              setRateTarget({ id: p.id, rate: String(p.commissionRate) })
+                            }
+                          >
+                            Set commission rate
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {p.status === "Active" ? (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                suspendUser(p.id, user.name);
+                                toast.warning(`${p.name} suspended`);
+                              }}
+                            >
+                              Suspend
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                reactivateUser(p.id, user.name);
+                                toast.success(`${p.name} reactivated`);
+                              }}
+                            >
+                              Reactivate
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => setDeleteTarget(p.id)}
+                          >
+                            Delete account
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       </PageContainer>
 

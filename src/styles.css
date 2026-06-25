@@ -165,6 +165,18 @@
     width: 100%;
     min-width: max(44rem, 100%);
   }
+  .responsive-table-scroll {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-inline: contain;
+  }
+  .responsive-table-scroll > table {
+    width: 100%;
+  }
   main [class*="grid"] {
     min-width: 0;
   }
