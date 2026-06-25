@@ -133,6 +133,7 @@
     font: inherit;
   }
   table {
+    width: max-content;
     min-width: 44rem;
     white-space: nowrap;
   }
@@ -148,8 +149,21 @@
     max-width: 100%;
   }
   main .shadow-card:has(> table),
-  main .overflow-hidden:has(> table) {
+  main .overflow-hidden:has(> table),
+  main .rounded-lg:has(> table),
+  main .rounded-xl:has(> table) {
+    max-width: 100%;
     overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-inline: contain;
+  }
+  main .shadow-card:has(> table) > table,
+  main .overflow-hidden:has(> table) > table,
+  main .rounded-lg:has(> table) > table,
+  main .rounded-xl:has(> table) > table {
+    width: 100%;
+    min-width: max(44rem, 100%);
   }
   main [class*="grid"] {
     min-width: 0;
@@ -166,7 +180,7 @@
   }
   @media (max-width: 640px) {
     table {
-      min-width: 38rem;
+      min-width: 40rem;
     }
     main button,
     main a[role="button"] {

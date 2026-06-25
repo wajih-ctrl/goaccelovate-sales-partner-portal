@@ -452,7 +452,9 @@ export function PageHeader({
 }
 
 export function PageContainer({ children }: { children: ReactNode }) {
-  return <div className="min-w-0 max-w-full space-y-6 overflow-hidden p-4 md:p-8">{children}</div>;
+  return (
+    <div className="min-w-0 max-w-full space-y-6 overflow-x-visible p-4 md:p-8">{children}</div>
+  );
 }
 
 export function StatusBadge({ status }: { status: string }) {
