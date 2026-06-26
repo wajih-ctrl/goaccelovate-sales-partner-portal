@@ -21,13 +21,33 @@ function normalizePublicUrl(value: string | undefined) {
   return withProtocol.replace(/\/+$/, "");
 }
 
-const appUrl = () =>
-  normalizePublicUrl(process.env.APP_URL) ||
-  normalizePublicUrl(process.env.VITE_APP_URL) ||
-  normalizePublicUrl(process.env.VERCEL_PROJECT_PRODUCTION_URL) ||
-  normalizePublicUrl(process.env.VERCEL_URL) ||
-  normalizePublicUrl(process.env.URL) ||
-  "https://goaccelovate-sales-partner-portal.vercel.app";
+function requestOrigin(request: Request) {
+  const origin = normalizePublicUrl(request.headers.get("origin") || undefined);
+  if (origin) return origin;
+
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || undefined;
+  if (!host) return "";
+  const protocol = request.headers.get("x-forwarded-proto") || "https";
+  return normalizePublicUrl(`${protocol}://${host}`);
+}
+
+function isLocalOrigin(value: string) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value);
+}
+
+function appUrl(request: Request) {
+  const origin = requestOrigin(request);
+  const configured =
+    normalizePublicUrl(process.env.APP_URL) ||
+    normalizePublicUrl(process.env.VITE_APP_URL) ||
+    normalizePublicUrl(process.env.VERCEL_PROJECT_PRODUCTION_URL) ||
+    normalizePublicUrl(process.env.VERCEL_URL) ||
+    normalizePublicUrl(process.env.URL);
+
+  return origin && !isLocalOrigin(origin)
+    ? origin
+    : configured || origin || "http://127.0.0.1:5173";
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -38,6 +58,72 @@ function json(body: unknown, status = 200) {
 
 function envValue(name: string) {
   return process.env[name]?.trim();
+}
+
+function normalizeSupabaseUrl(value: string | undefined) {
+  const normalized = normalizePublicUrl(value);
+  return normalized.endsWith("/auth/v1") ? normalized.slice(0, -"/auth/v1".length) : normalized;
+}
+
+function decodeJwtPayload(jwt: string): { iss?: string } | null {
+  try {
+    const encoded = jwt.split(".")[1];
+    if (!encoded) return null;
+    const padded = encoded.padEnd(encoded.length + ((4 - (encoded.length % 4)) % 4), "=");
+    const base64 = padded.replace(/-/g, "+").replace(/_/g, "/");
+    if (typeof atob !== "function") return null;
+    const json = atob(base64);
+    return JSON.parse(json) as { iss?: string };
+  } catch {
+    return null;
+  }
+}
+
+function supabaseUrlFromJwt(jwt: string) {
+  return normalizeSupabaseUrl(decodeJwtPayload(jwt)?.iss);
+}
+
+function candidateSupabaseUrls(jwt: string) {
+  return [
+    supabaseUrlFromJwt(jwt),
+    normalizeSupabaseUrl(envValue("SUPABASE_URL")),
+    normalizeSupabaseUrl(envValue("VITE_SUPABASE_URL")),
+  ].filter((url, index, urls) => url && urls.indexOf(url) === index);
+}
+
+async function getAuthedService(jwt: string) {
+  const serviceRoleKey = envValue("SUPABASE_SERVICE_ROLE_KEY");
+  const urls = candidateSupabaseUrls(jwt);
+
+  if (!urls.length || !serviceRoleKey) {
+    return {
+      error:
+        "Real invitations are not configured. Set VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the server.",
+      status: 500,
+    } as const;
+  }
+
+  let lastAuthError = "";
+  for (const supabaseUrl of urls) {
+    const service = createClient<Database>(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const {
+      data: { user: authUser },
+      error: authError,
+    } = await service.auth.getUser(jwt);
+
+    if (!authError && authUser) return { service, authUser } as const;
+    lastAuthError = authError?.message || "Unable to verify session.";
+  }
+
+  return {
+    error:
+      "Invalid session. Sign in again and verify Vercel uses the same Supabase project URL and service-role key as the frontend.",
+    detail: lastAuthError,
+    status: 401,
+  } as const;
 }
 
 function normalizeEmail(email: string) {
@@ -65,32 +151,14 @@ export const Route = createFileRoute("/api/invitations")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const supabaseUrl = envValue("SUPABASE_URL") || envValue("VITE_SUPABASE_URL");
-        const serviceRoleKey = envValue("SUPABASE_SERVICE_ROLE_KEY");
-
-        if (!supabaseUrl || !serviceRoleKey) {
-          return json(
-            {
-              error:
-                "Real invitations are not configured. Set SUPABASE_SERVICE_ROLE_KEY on the server.",
-            },
-            500,
-          );
-        }
-
         const authHeader = request.headers.get("authorization") || "";
         const jwt = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
         if (!jwt) return json({ error: "Authentication required." }, 401);
 
-        const service = createClient<Database>(supabaseUrl, serviceRoleKey, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-
-        const {
-          data: { user: authUser },
-          error: authError,
-        } = await service.auth.getUser(jwt);
-        if (authError || !authUser) return json({ error: "Invalid session." }, 401);
+        const authed = await getAuthedService(jwt);
+        if ("error" in authed)
+          return json({ error: authed.error, detail: authed.detail }, authed.status);
+        const { service, authUser } = authed;
 
         const { data: actor, error: actorError } = await service
           .from("profiles")
@@ -126,7 +194,7 @@ export const Route = createFileRoute("/api/invitations")({
         const { data: inviteData, error: inviteError } = await service.auth.admin.inviteUserByEmail(
           parsed.email,
           {
-            redirectTo: `${appUrl()}/invitation`,
+            redirectTo: `${appUrl(request)}/invitation`,
             data: {
               full_name: parsed.name,
               role: parsed.role,
@@ -189,32 +257,14 @@ export const Route = createFileRoute("/api/invitations")({
         });
       },
       DELETE: async ({ request }) => {
-        const supabaseUrl = envValue("SUPABASE_URL") || envValue("VITE_SUPABASE_URL");
-        const serviceRoleKey = envValue("SUPABASE_SERVICE_ROLE_KEY");
-
-        if (!supabaseUrl || !serviceRoleKey) {
-          return json(
-            {
-              error:
-                "Real invitations are not configured. Set SUPABASE_SERVICE_ROLE_KEY on the server.",
-            },
-            500,
-          );
-        }
-
         const authHeader = request.headers.get("authorization") || "";
         const jwt = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
         if (!jwt) return json({ error: "Authentication required." }, 401);
 
-        const service = createClient<Database>(supabaseUrl, serviceRoleKey, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-
-        const {
-          data: { user: authUser },
-          error: authError,
-        } = await service.auth.getUser(jwt);
-        if (authError || !authUser) return json({ error: "Invalid session." }, 401);
+        const authed = await getAuthedService(jwt);
+        if ("error" in authed)
+          return json({ error: authed.error, detail: authed.detail }, authed.status);
+        const { service, authUser } = authed;
 
         const { data: actor, error: actorError } = await service
           .from("profiles")

@@ -40,7 +40,7 @@ export function getAuthRedirectUrl(path = "/login") {
       normalizePublicUrl(import.meta.env.VITE_VERCEL_URL) ||
       normalizePublicUrl(import.meta.env.VITE_APP_URL);
 
-    return `${envOrigin || serverFallback || "https://goaccelovate-sales-partner-portal.vercel.app"}${path}`;
+    return `${envOrigin || serverFallback || "http://127.0.0.1:5173"}${path}`;
   }
 
   const origin = window.location.origin;

@@ -1,11 +1,23 @@
 import { useState, type ReactNode } from "react";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
 export function ReasonDialog({
-  open, onOpenChange, title, description, confirmLabel = "Confirm", destructive = true, onConfirm, placeholder,
+  open,
+  onOpenChange,
+  title,
+  description,
+  confirmLabel = "Confirm",
+  destructive = true,
+  onConfirm,
+  placeholder,
 }: {
   open: boolean;
   onOpenChange: (b: boolean) => void;
@@ -18,7 +30,13 @@ export function ReasonDialog({
 }) {
   const [reason, setReason] = useState("");
   return (
-    <Dialog open={open} onOpenChange={(b) => { onOpenChange(b); if (!b) setReason(""); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(b) => {
+        onOpenChange(b);
+        if (!b) setReason("");
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -32,12 +50,20 @@ export function ReasonDialog({
           className="w-full rounded-md border bg-background p-3 text-sm"
         />
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
           <Button
             variant={destructive ? "destructive" : "default"}
             disabled={!reason.trim()}
-            onClick={() => { onConfirm(reason.trim()); setReason(""); onOpenChange(false); }}
-          >{confirmLabel}</Button>
+            onClick={() => {
+              onConfirm(reason.trim());
+              setReason("");
+              onOpenChange(false);
+            }}
+          >
+            {confirmLabel}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -45,7 +71,14 @@ export function ReasonDialog({
 }
 
 export function FormDialog({
-  open, onOpenChange, title, description, children, onSubmit, submitLabel = "Save", canSubmit = true,
+  open,
+  onOpenChange,
+  title,
+  description,
+  children,
+  onSubmit,
+  submitLabel = "Save",
+  canSubmit = true,
 }: {
   open: boolean;
   onOpenChange: (b: boolean) => void;
@@ -65,8 +98,17 @@ export function FormDialog({
         </DialogHeader>
         <div className="space-y-3">{children}</div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button disabled={!canSubmit} onClick={() => { onSubmit(); }}>{submitLabel}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!canSubmit}
+            onClick={() => {
+              onSubmit();
+            }}
+          >
+            {submitLabel}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

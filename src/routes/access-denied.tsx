@@ -14,10 +14,17 @@ function AccessDenied() {
           <ShieldAlert className="h-7 w-7" />
         </div>
         <h1 className="text-2xl font-semibold">Access denied</h1>
-        <p className="text-sm text-muted-foreground">You don't have permission to view this resource. Sales partners can only access their own data. If you think this is a mistake, contact your GoAccelovate account manager.</p>
+        <p className="text-sm text-muted-foreground">
+          You don't have permission to view this resource. Sales partners can only access their own
+          data. If you think this is a mistake, contact your GoAccelovate account manager.
+        </p>
         <div className="flex justify-center gap-2">
-          <Link to="/dashboard"><Button>Back to dashboard</Button></Link>
-          <Link to="/login"><Button variant="outline">Switch role</Button></Link>
+          <Link to="/dashboard">
+            <Button>Back to dashboard</Button>
+          </Link>
+          <Link to="/login">
+            <Button variant="outline">Switch role</Button>
+          </Link>
         </div>
       </div>
     </div>
