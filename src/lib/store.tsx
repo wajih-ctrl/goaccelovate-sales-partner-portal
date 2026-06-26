@@ -1494,49 +1494,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return false;
         }
       }
-      const call = { ...c, id: uid("DC") };
-      setCalls((cs) => [call, ...cs]);
-      pushActivity({
-        leadId: c.leadId,
-        type: "discovery_call",
-        user: actor,
-        text: `Discovery call logged (${c.duration} min)`,
-        private: c.private,
-      });
-      pushAudit({
-        user: actor,
-        action: "Discovery Call Logged",
-        module: "Leads",
-        details: c.leadId,
-      });
-      if (realMode && supabase) {
-        const { data, error } = await supabase
-          .from("discovery_calls")
-          .insert({
-            lead_id: c.leadId,
-            call_at: c.date,
-            duration_minutes: c.duration,
-            goaccelovate_attendees: c.attendees,
-            client_attendees: c.clientAttendees,
-            partner_joined: c.partnerJoined,
-            summary: c.summary,
-            outcomes: c.outcomes,
-            next_steps: c.nextSteps,
-            follow_up_date: c.followUp || null,
-            recording_url: c.attachmentName || null,
-            is_private: c.private,
-            created_by: user?.id || null,
-          })
-          .select("id")
-          .single();
 
-        if (error) {
-          handleWriteError(error);
-          return false;
-        }
+      if (realMode && supabase) {
+        const callId = crypto.randomUUID();
+        let storagePath: string | null = null;
 
         if (c.attachmentFile) {
-          const storagePath = buildStoragePath(user?.id, data.id, c.attachmentFile);
+          storagePath = buildStoragePath(user?.id, callId, c.attachmentFile);
           const { error: uploadError } = await supabase.storage
             .from(STORAGE_BUCKETS.discoveryCallFiles)
             .upload(storagePath, c.attachmentFile, {
@@ -1545,14 +1509,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             });
           if (uploadError) {
             handleWriteError(uploadError, "Discovery call attachment upload failed.");
-            reloadAfterWrite();
             return false;
           }
+        }
 
+        const { error } = await supabase.from("discovery_calls").insert({
+          id: callId,
+          lead_id: c.leadId,
+          call_at: c.date,
+          duration_minutes: c.duration,
+          goaccelovate_attendees: c.attendees,
+          client_attendees: c.clientAttendees,
+          partner_joined: c.partnerJoined,
+          summary: c.summary,
+          outcomes: c.outcomes,
+          next_steps: c.nextSteps,
+          follow_up_date: c.followUp || null,
+          recording_url: c.attachmentFile?.name || c.attachmentName || null,
+          is_private: c.private,
+          created_by: user?.id || null,
+        });
+
+        if (error) {
+          if (storagePath) {
+            await supabase.storage.from(STORAGE_BUCKETS.discoveryCallFiles).remove([storagePath]);
+          }
+          handleWriteError(error);
+          return false;
+        }
+
+        if (c.attachmentFile && storagePath) {
           const { error: metadataError } = await supabase
             .from("discovery_call_attachments")
             .insert({
-              discovery_call_id: data.id,
+              discovery_call_id: callId,
               name: c.attachmentFile.name,
               storage_bucket: STORAGE_BUCKETS.discoveryCallFiles,
               storage_path: storagePath,
@@ -1560,6 +1550,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             });
           if (metadataError) {
             await supabase.storage.from(STORAGE_BUCKETS.discoveryCallFiles).remove([storagePath]);
+            await supabase.from("discovery_calls").delete().eq("id", callId);
             handleWriteError(
               metadataError,
               "Discovery call attachment metadata could not be saved.",
@@ -1568,6 +1559,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             return false;
           }
         }
+
+        pushActivity({
+          leadId: c.leadId,
+          type: "discovery_call",
+          user: actor,
+          text: `Discovery call logged (${c.duration} min)`,
+          private: c.private,
+        });
+        pushAudit({
+          user: actor,
+          action: "Discovery Call Logged",
+          module: "Leads",
+          details: c.leadId,
+        });
 
         if (!c.private) {
           const lead = leads.find((item) => item.id === c.leadId);
@@ -1584,6 +1589,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return true;
       }
 
+      const call = { ...c, id: uid("DC") };
+      setCalls((cs) => [call, ...cs]);
+      pushActivity({
+        leadId: c.leadId,
+        type: "discovery_call",
+        user: actor,
+        text: `Discovery call logged (${c.duration} min)`,
+        private: c.private,
+      });
+      pushAudit({
+        user: actor,
+        action: "Discovery Call Logged",
+        module: "Leads",
+        details: c.leadId,
+      });
       toast.success("Discovery call logged");
       return true;
     },
