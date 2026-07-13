@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- New agreement RPCs are introduced by the pending migration. */
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { DEMO_USERS, type Role, type User } from "./mock-data";
+import type { Role, User } from "./domain";
 import { getAuthRedirectUrl, isSupabaseConfigured, supabase } from "./supabase";
 
 interface AuthResult {
@@ -9,11 +10,11 @@ interface AuthResult {
 interface AuthCtx {
   user: User | null;
   ready: boolean;
-  authMode: "demo" | "supabase" | null;
-  login: (role: Role) => void;
+  authMode: "supabase" | null;
   signIn: (email: string, password: string) => Promise<AuthResult>;
   resetPassword: (email: string) => Promise<AuthResult>;
   acceptInvitation: (payload: { fullName: string; password: string }) => Promise<AuthResult>;
+  signRequiredAgreements: (legalName: string) => Promise<AuthResult>;
   logout: () => Promise<void>;
 }
 
@@ -21,14 +22,12 @@ const Ctx = createContext<AuthCtx>({
   user: null,
   ready: false,
   authMode: null,
-  login: () => {},
   signIn: async () => ({}),
   resetPassword: async () => ({}),
   acceptInvitation: async () => ({}),
+  signRequiredAgreements: async () => ({}),
   logout: async () => {},
 });
-
-const DEMO_KEY = "gtpp_demo_user";
 
 interface ProfileRow {
   id: string;
@@ -38,10 +37,6 @@ interface ProfileRow {
   account_status: "active" | "suspended" | "pending" | "deactivated";
   partner_id: string | null;
   avatar_url: string | null;
-}
-
-function demoUser(role: Role) {
-  return DEMO_USERS.find((u) => u.role === role)!;
 }
 
 function mapProfile(profile: ProfileRow): User {
@@ -85,7 +80,15 @@ async function loadSupabaseUser(): Promise<User | null> {
     throw new Error("This account is not active. Please contact GoAccelovate support.");
   }
 
-  return mapProfile(profile);
+  const mapped = mapProfile(profile);
+  if (mapped.role === "partner" && mapped.partnerId) {
+    const { data: complete, error: agreementError } = await (supabase as any).rpc(
+      "partner_agreements_complete",
+      { check_partner: mapped.partnerId },
+    );
+    mapped.agreementsComplete = agreementError ? false : Boolean(complete);
+  }
+  return mapped;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -98,20 +101,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     async function boot() {
       try {
+        localStorage.removeItem("gtpp_demo_user");
         if (isSupabaseConfigured) {
           const supabaseUser = await loadSupabaseUser();
           if (!cancelled && supabaseUser) {
-            localStorage.removeItem(DEMO_KEY);
             setUser(supabaseUser);
             setAuthMode("supabase");
-            return;
           }
-        }
-
-        const raw = typeof window !== "undefined" ? localStorage.getItem(DEMO_KEY) : null;
-        if (raw && !cancelled) {
-          setUser(JSON.parse(raw));
-          setAuthMode("demo");
         }
       } catch (error) {
         console.error(error);
@@ -132,7 +128,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loadSupabaseUser()
         .then((nextUser) => {
           if (nextUser) {
-            localStorage.removeItem(DEMO_KEY);
             setUser(nextUser);
             setAuthMode("supabase");
           }
@@ -146,13 +141,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = (role: Role) => {
-    const u = demoUser(role);
-    localStorage.setItem(DEMO_KEY, JSON.stringify(u));
-    setUser(u);
-    setAuthMode("demo");
-  };
-
   const signIn: AuthCtx["signIn"] = async (email, password) => {
     if (!supabase) return { error: "Supabase is not configured for this environment." };
 
@@ -162,7 +150,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const nextUser = await loadSupabaseUser();
       if (nextUser) {
-        localStorage.removeItem(DEMO_KEY);
         setUser(nextUser);
         setAuthMode("supabase");
       }
@@ -213,7 +200,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const nextUser = await loadSupabaseUser();
     if (nextUser) {
-      localStorage.removeItem(DEMO_KEY);
       setUser(nextUser);
       setAuthMode("supabase");
     }
@@ -222,15 +208,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    localStorage.removeItem(DEMO_KEY);
     if (supabase) await supabase.auth.signOut();
     setUser(null);
     setAuthMode(null);
   };
 
+  const signRequiredAgreements: AuthCtx["signRequiredAgreements"] = async (legalName) => {
+    if (!supabase || !user) return { error: "You must be signed in to sign agreements." };
+    const { error } = await (supabase as any).rpc("accept_required_partner_agreements", {
+      signer_name: legalName,
+      signer_email: user.email,
+      browser_user_agent: typeof navigator === "undefined" ? null : navigator.userAgent,
+    });
+    if (error) return { error: error.message };
+    const nextUser = await loadSupabaseUser();
+    if (nextUser) setUser(nextUser);
+    return {};
+  };
+
   return (
     <Ctx.Provider
-      value={{ user, ready, authMode, login, signIn, resetPassword, acceptInvitation, logout }}
+      value={{
+        user,
+        ready,
+        authMode,
+        signIn,
+        resetPassword,
+        acceptInvitation,
+        signRequiredAgreements,
+        logout,
+      }}
     >
       {children}
     </Ctx.Provider>

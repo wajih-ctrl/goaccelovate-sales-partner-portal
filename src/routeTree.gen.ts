@@ -19,7 +19,6 @@ import { Route as ApiInvitationsRouteImport } from './routes/api.invitations'
 import { Route as AppUsersRouteImport } from './routes/_app.users'
 import { Route as AppSubmitLeadRouteImport } from './routes/_app.submit-lead'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
-import { Route as AppRequestPayoutRouteImport } from './routes/_app.request-payout'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppPipelineListRouteImport } from './routes/_app.pipeline-list'
@@ -28,8 +27,6 @@ import { Route as AppPayoutsRouteImport } from './routes/_app.payouts'
 import { Route as AppPartnersRouteImport } from './routes/_app.partners'
 import { Route as AppOnboardingRouteImport } from './routes/_app.onboarding'
 import { Route as AppLeadsRouteImport } from './routes/_app.leads'
-import { Route as AppDisputesRouteImport } from './routes/_app.disputes'
-import { Route as AppDiscoveryCallsRouteImport } from './routes/_app.discovery-calls'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppCommissionsRouteImport } from './routes/_app.commissions'
 import { Route as AppClientPaymentsRouteImport } from './routes/_app.client-payments'
@@ -87,11 +84,6 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
-const AppRequestPayoutRoute = AppRequestPayoutRouteImport.update({
-  id: '/request-payout',
-  path: '/request-payout',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -130,16 +122,6 @@ const AppOnboardingRoute = AppOnboardingRouteImport.update({
 const AppLeadsRoute = AppLeadsRouteImport.update({
   id: '/leads',
   path: '/leads',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDisputesRoute = AppDisputesRouteImport.update({
-  id: '/disputes',
-  path: '/disputes',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDiscoveryCallsRoute = AppDiscoveryCallsRouteImport.update({
-  id: '/discovery-calls',
-  path: '/discovery-calls',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
@@ -189,8 +171,6 @@ export interface FileRoutesByFullPath {
   '/client-payments': typeof AppClientPaymentsRoute
   '/commissions': typeof AppCommissionsRoute
   '/dashboard': typeof AppDashboardRoute
-  '/discovery-calls': typeof AppDiscoveryCallsRoute
-  '/disputes': typeof AppDisputesRoute
   '/leads': typeof AppLeadsRouteWithChildren
   '/onboarding': typeof AppOnboardingRoute
   '/partners': typeof AppPartnersRouteWithChildren
@@ -199,7 +179,6 @@ export interface FileRoutesByFullPath {
   '/pipeline-list': typeof AppPipelineListRoute
   '/profile': typeof AppProfileRoute
   '/reports': typeof AppReportsRoute
-  '/request-payout': typeof AppRequestPayoutRoute
   '/settings': typeof AppSettingsRoute
   '/submit-lead': typeof AppSubmitLeadRoute
   '/users': typeof AppUsersRoute
@@ -218,8 +197,6 @@ export interface FileRoutesByTo {
   '/client-payments': typeof AppClientPaymentsRoute
   '/commissions': typeof AppCommissionsRoute
   '/dashboard': typeof AppDashboardRoute
-  '/discovery-calls': typeof AppDiscoveryCallsRoute
-  '/disputes': typeof AppDisputesRoute
   '/leads': typeof AppLeadsRouteWithChildren
   '/onboarding': typeof AppOnboardingRoute
   '/partners': typeof AppPartnersRouteWithChildren
@@ -228,7 +205,6 @@ export interface FileRoutesByTo {
   '/pipeline-list': typeof AppPipelineListRoute
   '/profile': typeof AppProfileRoute
   '/reports': typeof AppReportsRoute
-  '/request-payout': typeof AppRequestPayoutRoute
   '/settings': typeof AppSettingsRoute
   '/submit-lead': typeof AppSubmitLeadRoute
   '/users': typeof AppUsersRoute
@@ -249,8 +225,6 @@ export interface FileRoutesById {
   '/_app/client-payments': typeof AppClientPaymentsRoute
   '/_app/commissions': typeof AppCommissionsRoute
   '/_app/dashboard': typeof AppDashboardRoute
-  '/_app/discovery-calls': typeof AppDiscoveryCallsRoute
-  '/_app/disputes': typeof AppDisputesRoute
   '/_app/leads': typeof AppLeadsRouteWithChildren
   '/_app/onboarding': typeof AppOnboardingRoute
   '/_app/partners': typeof AppPartnersRouteWithChildren
@@ -259,7 +233,6 @@ export interface FileRoutesById {
   '/_app/pipeline-list': typeof AppPipelineListRoute
   '/_app/profile': typeof AppProfileRoute
   '/_app/reports': typeof AppReportsRoute
-  '/_app/request-payout': typeof AppRequestPayoutRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/submit-lead': typeof AppSubmitLeadRoute
   '/_app/users': typeof AppUsersRoute
@@ -280,8 +253,6 @@ export interface FileRouteTypes {
     | '/client-payments'
     | '/commissions'
     | '/dashboard'
-    | '/discovery-calls'
-    | '/disputes'
     | '/leads'
     | '/onboarding'
     | '/partners'
@@ -290,7 +261,6 @@ export interface FileRouteTypes {
     | '/pipeline-list'
     | '/profile'
     | '/reports'
-    | '/request-payout'
     | '/settings'
     | '/submit-lead'
     | '/users'
@@ -309,8 +279,6 @@ export interface FileRouteTypes {
     | '/client-payments'
     | '/commissions'
     | '/dashboard'
-    | '/discovery-calls'
-    | '/disputes'
     | '/leads'
     | '/onboarding'
     | '/partners'
@@ -319,7 +287,6 @@ export interface FileRouteTypes {
     | '/pipeline-list'
     | '/profile'
     | '/reports'
-    | '/request-payout'
     | '/settings'
     | '/submit-lead'
     | '/users'
@@ -339,8 +306,6 @@ export interface FileRouteTypes {
     | '/_app/client-payments'
     | '/_app/commissions'
     | '/_app/dashboard'
-    | '/_app/discovery-calls'
-    | '/_app/disputes'
     | '/_app/leads'
     | '/_app/onboarding'
     | '/_app/partners'
@@ -349,7 +314,6 @@ export interface FileRouteTypes {
     | '/_app/pipeline-list'
     | '/_app/profile'
     | '/_app/reports'
-    | '/_app/request-payout'
     | '/_app/settings'
     | '/_app/submit-lead'
     | '/_app/users'
@@ -440,13 +404,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/request-payout': {
-      id: '/_app/request-payout'
-      path: '/request-payout'
-      fullPath: '/request-payout'
-      preLoaderRoute: typeof AppRequestPayoutRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/reports': {
       id: '/_app/reports'
       path: '/reports'
@@ -501,20 +458,6 @@ declare module '@tanstack/react-router' {
       path: '/leads'
       fullPath: '/leads'
       preLoaderRoute: typeof AppLeadsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/disputes': {
-      id: '/_app/disputes'
-      path: '/disputes'
-      fullPath: '/disputes'
-      preLoaderRoute: typeof AppDisputesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/discovery-calls': {
-      id: '/_app/discovery-calls'
-      path: '/discovery-calls'
-      fullPath: '/discovery-calls'
-      preLoaderRoute: typeof AppDiscoveryCallsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/dashboard': {
@@ -599,8 +542,6 @@ interface AppRouteChildren {
   AppClientPaymentsRoute: typeof AppClientPaymentsRoute
   AppCommissionsRoute: typeof AppCommissionsRoute
   AppDashboardRoute: typeof AppDashboardRoute
-  AppDiscoveryCallsRoute: typeof AppDiscoveryCallsRoute
-  AppDisputesRoute: typeof AppDisputesRoute
   AppLeadsRoute: typeof AppLeadsRouteWithChildren
   AppOnboardingRoute: typeof AppOnboardingRoute
   AppPartnersRoute: typeof AppPartnersRouteWithChildren
@@ -609,7 +550,6 @@ interface AppRouteChildren {
   AppPipelineListRoute: typeof AppPipelineListRoute
   AppProfileRoute: typeof AppProfileRoute
   AppReportsRoute: typeof AppReportsRoute
-  AppRequestPayoutRoute: typeof AppRequestPayoutRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSubmitLeadRoute: typeof AppSubmitLeadRoute
   AppUsersRoute: typeof AppUsersRoute
@@ -621,8 +561,6 @@ const AppRouteChildren: AppRouteChildren = {
   AppClientPaymentsRoute: AppClientPaymentsRoute,
   AppCommissionsRoute: AppCommissionsRoute,
   AppDashboardRoute: AppDashboardRoute,
-  AppDiscoveryCallsRoute: AppDiscoveryCallsRoute,
-  AppDisputesRoute: AppDisputesRoute,
   AppLeadsRoute: AppLeadsRouteWithChildren,
   AppOnboardingRoute: AppOnboardingRoute,
   AppPartnersRoute: AppPartnersRouteWithChildren,
@@ -631,7 +569,6 @@ const AppRouteChildren: AppRouteChildren = {
   AppPipelineListRoute: AppPipelineListRoute,
   AppProfileRoute: AppProfileRoute,
   AppReportsRoute: AppReportsRoute,
-  AppRequestPayoutRoute: AppRequestPayoutRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSubmitLeadRoute: AppSubmitLeadRoute,
   AppUsersRoute: AppUsersRoute,

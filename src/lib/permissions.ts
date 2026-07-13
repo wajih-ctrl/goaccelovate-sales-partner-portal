@@ -1,35 +1,31 @@
-import type { Role } from "./mock-data";
+import type { Role } from "./domain";
 
 const ADMIN_PATHS = [
   "/announcements",
   "/client-payments",
   "/commissions",
   "/dashboard",
-  "/discovery-calls",
-  "/disputes",
   "/leads",
   "/partners",
   "/payouts",
   "/pipeline",
   "/pipeline-list",
   "/reports",
+  "/users",
 ];
 
 const PARTNER_PATHS = [
   "/announcements",
   "/commissions",
   "/dashboard",
-  "/disputes",
   "/leads",
   "/onboarding",
-  "/payouts",
   "/profile",
   "/reports",
-  "/request-payout",
   "/submit-lead",
 ];
 
-const SUPER_ADMIN_ONLY_PATHS = ["/audit-log", "/settings", "/users"];
+const SUPER_ADMIN_ONLY_PATHS = ["/audit-log", "/settings"];
 
 function pathMatches(pathname: string, allowedPath: string) {
   return pathname === allowedPath || pathname.startsWith(`${allowedPath}/`);

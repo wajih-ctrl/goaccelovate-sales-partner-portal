@@ -1,7 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 
 const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const anon = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const anon =
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const accounts = {
   partnerA: {
@@ -55,6 +58,16 @@ async function expectError(label, promise) {
   if (!error) throw new Error(`${label}: expected RLS error`);
 }
 
+async function expectStorageSuccess(label, promise) {
+  const { data, error } = await promise;
+  if (error || !data) throw new Error(`${label}: ${error?.message || "no file returned"}`);
+}
+
+async function expectStorageDenied(label, promise) {
+  const { data, error } = await promise;
+  if (!error && data) throw new Error(`${label}: storage access unexpectedly succeeded`);
+}
+
 async function expectNoMutation(label, before, mutationPromise, afterPromise, field) {
   const { data, error } = await mutationPromise;
   if (error) return;
@@ -75,10 +88,21 @@ async function main() {
   const admin = await signIn("admin");
   const superAdmin = await signIn("superAdmin");
 
-  const { data: partnerAProfile } = await partnerA.from("profiles").select("partner_id").single();
-  const { data: partnerBProfile } = await partnerB.from("profiles").select("partner_id").single();
+  const { data: partnerAProfile, error: partnerAProfileError } = await partnerA
+    .from("profiles")
+    .select("partner_id")
+    .single();
+  const { data: partnerBProfile, error: partnerBProfileError } = await partnerB
+    .from("profiles")
+    .select("partner_id")
+    .single();
 
-  if (!partnerAProfile?.partner_id || !partnerBProfile?.partner_id) {
+  if (
+    partnerAProfileError ||
+    partnerBProfileError ||
+    !partnerAProfile?.partner_id ||
+    !partnerBProfile?.partner_id
+  ) {
     throw new Error("Partner test users must be linked to partner profiles.");
   }
 
@@ -98,14 +122,77 @@ async function main() {
     "Partner A cannot select Partner B documents",
     partnerA.from("partner_documents").select("id").eq("partner_id", partnerBProfile.partner_id),
   );
+
+  const { data: partnerBLeads, error: partnerBLeadError } = await partnerB
+    .from("leads")
+    .select("id")
+    .limit(100);
+  if (partnerBLeadError)
+    throw new Error(`Partner B lead lookup failed: ${partnerBLeadError.message}`);
+  const partnerBLeadIds = (partnerBLeads || []).map((lead) => lead.id);
+  if (partnerBLeadIds.length > 0) {
+    await expectNoRows(
+      "Partner A cannot select Partner B lead attachments",
+      partnerA.from("lead_attachments").select("id").in("lead_id", partnerBLeadIds),
+    );
+    await expectNoRows(
+      "Partner A cannot select Partner B discovery calls",
+      partnerA.from("discovery_calls").select("id").in("lead_id", partnerBLeadIds),
+    );
+  }
   await expectNoRows(
     "Partner cannot select client payments",
     partnerA.from("client_payments").select("id").limit(1),
   );
   await expectNoRows(
+    "Partner cannot select private lead activity",
+    partnerA.from("lead_activity_log").select("id").eq("is_private", true).limit(1),
+  );
+  await expectNoRows(
+    "Partner cannot select historical disputes",
+    partnerA.from("disputes").select("id").limit(1),
+  );
+  await expectNoRows(
     "Partner cannot access audit log",
     partnerA.from("audit_log").select("id").limit(1),
   );
+
+  const documentPath = process.env.RLS_PARTNER_B_DOCUMENT_PATH;
+  const privateDocumentPath = process.env.RLS_PARTNER_B_PRIVATE_DOCUMENT_PATH;
+  const leadViewPath = process.env.RLS_PARTNER_B_LEAD_VIEW_PATH;
+  const leadDeletePath = process.env.RLS_PARTNER_B_LEAD_DELETE_PATH;
+  if (documentPath && privateDocumentPath && leadViewPath && leadDeletePath) {
+    await expectStorageDenied(
+      "Partner A cannot download Partner B document",
+      partnerA.storage.from("partner-documents").download(documentPath),
+    );
+    await expectStorageSuccess(
+      "Partner B can download own public document",
+      partnerB.storage.from("partner-documents").download(documentPath),
+    );
+    await expectStorageDenied(
+      "Partner B cannot download own private document",
+      partnerB.storage.from("partner-documents").download(privateDocumentPath),
+    );
+    await partnerA.storage.from("lead-attachments").remove([leadViewPath]);
+    await expectStorageSuccess(
+      "Partner A cannot delete Partner B attachment",
+      partnerB.storage.from("lead-attachments").download(leadViewPath),
+    );
+    await expectStorageDenied(
+      "Partner A cannot download Partner B attachment",
+      partnerA.storage.from("lead-attachments").download(leadViewPath),
+    );
+    const { error: ownDeleteError } = await partnerB.storage
+      .from("lead-attachments")
+      .remove([leadDeletePath]);
+    if (ownDeleteError)
+      throw new Error(`Partner B own attachment delete failed: ${ownDeleteError.message}`);
+    await expectStorageDenied(
+      "Deleted attachment is no longer downloadable",
+      partnerB.storage.from("lead-attachments").download(leadDeletePath),
+    );
+  }
 
   const { data: ownLead } = await partnerA
     .from("leads")
@@ -162,6 +249,13 @@ async function main() {
 
   const { error: superAuditError } = await superAdmin.from("audit_log").select("id").limit(1);
   if (superAuditError) throw new Error(`Super Admin audit read failed: ${superAuditError.message}`);
+
+  const { error: adminAgreementError } = await admin
+    .from("agreement_documents")
+    .select("id")
+    .limit(1);
+  if (adminAgreementError)
+    throw new Error(`Admin agreement document read failed: ${adminAgreementError.message}`);
 
   console.log("RLS verification passed");
 }

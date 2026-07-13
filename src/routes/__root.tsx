@@ -76,13 +76,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "GoAccelovate GTPP Sales Partner Portal" },
+      { title: "Go Accelerate Global Partner Program" },
       {
         name: "description",
         content: "Private partner portal for GoAccelovate Global Trade Partner Program.",
       },
-      { property: "og:title", content: "GoAccelovate GTPP Sales Partner Portal" },
-      { name: "twitter:title", content: "GoAccelovate GTPP Sales Partner Portal" },
+      { property: "og:title", content: "Go Accelerate Global Partner Program" },
+      { name: "twitter:title", content: "Go Accelerate Global Partner Program" },
       {
         property: "og:description",
         content: "Private partner portal for GoAccelovate Global Trade Partner Program.",

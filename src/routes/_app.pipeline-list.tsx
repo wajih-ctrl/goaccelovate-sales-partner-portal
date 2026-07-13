@@ -4,24 +4,16 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
-import { fmtCurrency, daysSince, type LeadStage } from "@/lib/mock-data";
+import { fmtCurrency, daysSince, type LeadStage } from "@/lib/domain";
 import { useState, useMemo } from "react";
 import { Search, Download } from "lucide-react";
 import { toast } from "sonner";
 import { FormDialog, ReasonDialog } from "@/components/common/dialogs";
+import { canMoveLeadStage, LEAD_STAGES } from "@/lib/program";
 
 export const Route = createFileRoute("/_app/pipeline-list")({ component: PipelineList });
 
-const STAGES: (LeadStage | "All")[] = [
-  "All",
-  "New Lead",
-  "In Conversation",
-  "Discovery Call",
-  "Proposal Sent",
-  "Negotiation",
-  "Closed Won",
-  "Closed Lost",
-];
+const STAGES: (LeadStage | "All")[] = ["All", ...LEAD_STAGES];
 
 function PipelineList() {
   const { user } = useAuth();
@@ -84,6 +76,10 @@ function PipelineList() {
   const changeStage = (leadId: string, target: LeadStage) => {
     const lead = leads.find((l) => l.id === leadId);
     if (!lead || lead.stage === target) return;
+    if (!canMoveLeadStage(user!.role, lead.stage, target, lead.previousStage)) {
+      toast.error("An On Hold lead must return to its previous stage.");
+      return;
+    }
     if (target === "Closed Won" && !lead.confirmedValue) {
       setCloseLeadId(leadId);
       setConfirmedValue(String(lead.estimatedValue));
@@ -193,8 +189,8 @@ function PipelineList() {
               Reset
             </Button>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="responsive-table-scroll">
+            <table className="min-w-[1080px] w-full whitespace-nowrap text-sm">
               <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 text-left">Company</th>

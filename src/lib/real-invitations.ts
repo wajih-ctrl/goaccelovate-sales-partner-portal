@@ -4,7 +4,7 @@ export type InviteUserPayload = {
   name: string;
   email: string;
   role: "admin" | "partner";
-  tier?: "Associate" | "Specialist" | "Partner";
+  commissionRate?: number;
 };
 
 export type InviteUserResult = {
@@ -24,7 +24,7 @@ export async function sendRealInvitation(payload: InviteUserPayload): Promise<In
 
   const { data, error: sessionError } = await supabase.auth.getSession();
   if (sessionError || !data.session?.access_token) {
-    return { error: "Sign in with a real Super Admin account before sending invites." };
+    return { error: "Sign in with a real Admin account before sending invites." };
   }
 
   const response = await fetch("/api/invitations", {

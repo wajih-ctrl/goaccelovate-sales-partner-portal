@@ -3,22 +3,15 @@ import { PageHeader, PageContainer, StatusBadge } from "@/components/layout/AppS
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
-import { fmtCurrency, daysSince, type LeadStage } from "@/lib/mock-data";
+import { fmtCurrency, daysSince, type LeadStage } from "@/lib/domain";
 import { FormDialog, ReasonDialog } from "@/components/common/dialogs";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { canMoveLeadStage, LEAD_STAGES } from "@/lib/program";
 
 export const Route = createFileRoute("/_app/pipeline")({ component: PipelineKanban });
 
-const STAGES: LeadStage[] = [
-  "New Lead",
-  "In Conversation",
-  "Discovery Call",
-  "Proposal Sent",
-  "Negotiation",
-  "Closed Won",
-  "Closed Lost",
-];
+const STAGES: LeadStage[] = LEAD_STAGES;
 
 type PendingMove = { leadId: string; targetStage: LeadStage; beforeId?: string };
 
@@ -32,10 +25,7 @@ function PipelineKanban() {
   const [confirmedValue, setConfirmedValue] = useState("");
 
   const availableLeads = useMemo(
-    () =>
-      leads.filter(
-        (l) => l.status !== "Duplicate Under Review" && l.status !== "Duplicate Rejected",
-      ),
+    () => leads.filter((l) => l.status !== "Duplicate Rejected"),
     [leads],
   );
 
@@ -74,6 +64,10 @@ function PipelineKanban() {
     if (!dragging || dragging.id === move.beforeId) return;
     const lead = leads.find((l) => l.id === move.leadId);
     if (!lead) return;
+    if (!canMoveLeadStage(user!.role, lead.stage, move.targetStage, lead.previousStage)) {
+      toast.error("An On Hold lead must return to its previous stage.");
+      return;
+    }
     if (move.targetStage === "Closed Won" && lead.stage !== "Closed Won" && !lead.confirmedValue) {
       setPendingMove(move);
       setConfirmedValue(String(lead.estimatedValue));
@@ -93,6 +87,10 @@ function PipelineKanban() {
   const stageSelect = (leadId: string, targetStage: LeadStage) => {
     const lead = leads.find((l) => l.id === leadId);
     if (!lead || lead.stage === targetStage) return;
+    if (!canMoveLeadStage(user!.role, lead.stage, targetStage, lead.previousStage)) {
+      toast.error("An On Hold lead must return to its previous stage.");
+      return;
+    }
     const move = { leadId, targetStage };
     if (targetStage === "Closed Won" && !lead.confirmedValue) {
       setPendingMove(move);

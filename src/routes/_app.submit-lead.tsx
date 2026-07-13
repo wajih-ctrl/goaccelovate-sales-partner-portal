@@ -7,6 +7,7 @@ import { useStore } from "@/lib/store";
 import { toast } from "sonner";
 import { useState, type ReactNode } from "react";
 import { Upload, AlertCircle, CheckCircle2 } from "lucide-react";
+import { COUNTRIES, INDUSTRIES } from "@/lib/program";
 
 export const Route = createFileRoute("/_app/submit-lead")({
   component: SubmitLead,
@@ -23,6 +24,7 @@ function SubmitLead() {
     contactTitle: "",
     contactEmail: "",
     contactPhone: "",
+    clientLinkedin: "",
     country: "",
     industry: "",
     value: "",
@@ -62,8 +64,8 @@ function SubmitLead() {
     if (!settings.currencies.includes(form.currency)) e.value = "Unsupported currency";
     if (!form.description.trim()) e.description = "Description is required";
     else if (form.description.trim().length < 50) e.description = "Minimum 50 characters required";
-    else if (form.description.trim().split(/\s+/).length > 500)
-      e.description = "Maximum 500 words allowed";
+    else if (form.description.trim().split(/\s+/).length > 1000)
+      e.description = "Maximum 1,000 words allowed";
     return e;
   };
 
@@ -88,6 +90,7 @@ function SubmitLead() {
           contactTitle: form.contactTitle.trim(),
           contactEmail: form.contactEmail.trim(),
           contactPhone: form.contactPhone.trim(),
+          clientLinkedin: form.clientLinkedin.trim(),
           country: form.country.trim(),
           industry: form.industry,
           estimatedValue: Number(form.value),
@@ -109,12 +112,11 @@ function SubmitLead() {
         }
         setUploading(false);
       }
-      if (lead.status !== "Duplicate Under Review")
+      if (lead.status !== "Duplicate Rejected")
         setOnboardingStep(user.partnerId!, "firstLead", true, user.name);
-      const duplicate = lead.status === "Duplicate Under Review";
+      const duplicate = lead.status === "Duplicate Rejected";
       setSubmitted({ id: lead.id, duplicate, duplicateReason: lead.duplicateReason });
-      if (duplicate)
-        toast.warning(`${lead.id} flagged as potential duplicate - sent to Admin for review.`);
+      if (duplicate) toast.warning(`${lead.id} was automatically rejected as a duplicate.`);
       else toast.success(`${lead.id} submitted successfully and added to your pipeline.`);
     } catch (error) {
       setUploading(false);
@@ -138,10 +140,10 @@ function SubmitLead() {
             {submitted.duplicate ? (
               <>
                 <AlertCircle className="mx-auto h-12 w-12 text-warning-foreground" />
-                <h2 className="mt-3 text-xl font-semibold">Sent for duplicate review</h2>
+                <h2 className="mt-3 text-xl font-semibold">Duplicate lead rejected</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Lead <strong>{submitted.id}</strong> matches an existing record. The Admin team
-                  will review and notify you of the outcome.
+                  Lead <strong>{submitted.id}</strong> matches an existing company or contact email
+                  and was automatically rejected. It did not enter the pipeline.
                 </p>
                 {submitted.duplicateReason && (
                   <p className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-warning-foreground">
@@ -155,7 +157,7 @@ function SubmitLead() {
                 <h2 className="mt-3 text-xl font-semibold">Lead accepted into pipeline</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
                   Lead <strong>{submitted.id}</strong> is now visible in your pipeline as{" "}
-                  <em>New Lead</em>.
+                  <em>Identified Opportunity</em>.
                 </p>
               </>
             )}
@@ -190,11 +192,16 @@ function SubmitLead() {
               />
             </Field>
             <Field label="Country" required error={errors.country}>
-              <input
+              <select
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                 value={form.country}
                 onChange={(e) => set("country", e.target.value)}
-              />
+              >
+                <option value="">Select country...</option>
+                {COUNTRIES.map((country) => (
+                  <option key={country}>{country}</option>
+                ))}
+              </select>
             </Field>
             <Field label="Contact name" required error={errors.contactName}>
               <input
@@ -224,6 +231,15 @@ function SubmitLead() {
                 onChange={(e) => set("contactPhone", e.target.value)}
               />
             </Field>
+            <Field label="Client LinkedIn">
+              <input
+                type="url"
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={form.clientLinkedin}
+                onChange={(e) => set("clientLinkedin", e.target.value)}
+                placeholder="https://www.linkedin.com/in/..."
+              />
+            </Field>
             <Field label="Industry / sector" required error={errors.industry}>
               <select
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm"
@@ -231,7 +247,7 @@ function SubmitLead() {
                 onChange={(e) => set("industry", e.target.value)}
               >
                 <option value="">Select…</option>
-                {settings.industries.map((i) => (
+                {Array.from(new Set([...INDUSTRIES, ...settings.industries])).map((i) => (
                   <option key={i}>{i}</option>
                 ))}
               </select>
@@ -258,10 +274,10 @@ function SubmitLead() {
           </div>
 
           <Field
-            label="Brief description"
+            label="Message"
             required
             error={errors.description}
-            hint={`${form.description.length} chars · min 50, max 500 words`}
+            hint={`${form.description.trim() ? form.description.trim().split(/\s+/).length : 0} of 1,000 words`}
           >
             <textarea
               rows={5}

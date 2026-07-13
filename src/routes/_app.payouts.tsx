@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
-import { fmtCurrency } from "@/lib/mock-data";
+import { fmtCurrency } from "@/lib/domain";
 import { toast } from "sonner";
 import { useState } from "react";
 import { ReasonDialog, FormDialog } from "@/components/common/dialogs";
@@ -48,80 +48,84 @@ function Payouts() {
       />
       <PageContainer>
         <Card className="shadow-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 text-left">Request ID</th>
-                {!isPartner && <th className="px-4 py-3 text-left">Partner</th>}
-                <th className="px-4 py-3 text-left">Deals</th>
-                <th className="px-4 py-3 text-left">Requested</th>
-                <th className="px-4 py-3 text-right">Amount</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-left">Paid</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((p) => {
-                const partner = partners.find((pp) => pp.id === p.partnerId);
-                return (
-                  <tr key={p.id} className="border-t hover:bg-accent/20">
-                    <td className="px-4 py-3 font-medium">{p.id}</td>
-                    {!isPartner && <td className="px-4 py-3">{partner?.name}</td>}
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {p.commissionIds.length} commission(s)
-                    </td>
-                    <td className="px-4 py-3 text-xs">
-                      {new Date(p.requestedDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold">{fmtCurrency(p.amount)}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={p.status} />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {p.paidDate ? new Date(p.paidDate).toLocaleDateString() : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right space-x-1">
-                      <Button size="sm" variant="ghost" onClick={() => setViewId(p.id)}>
-                        View
-                      </Button>
-                      {!isPartner && p.status === "Pending" && (
-                        <>
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              approvePayout(p.id, user!.name);
-                              toast.success(`${p.id} approved`);
-                            }}
-                          >
-                            Approve
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => setRejectId(p.id)}>
-                            Reject
-                          </Button>
-                        </>
-                      )}
-                      {!isPartner && p.status === "Approved" && (
-                        <Button size="sm" onClick={() => setPayId(p.id)}>
-                          Mark paid
+          <div className="responsive-table-scroll">
+            <table className="min-w-[1040px] w-full whitespace-nowrap text-sm">
+              <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left">Request ID</th>
+                  {!isPartner && <th className="px-4 py-3 text-left">Partner</th>}
+                  <th className="px-4 py-3 text-left">Deals</th>
+                  <th className="px-4 py-3 text-left">Requested</th>
+                  <th className="px-4 py-3 text-right">Amount</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Paid</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((p) => {
+                  const partner = partners.find((pp) => pp.id === p.partnerId);
+                  return (
+                    <tr key={p.id} className="border-t hover:bg-accent/20">
+                      <td className="px-4 py-3 font-medium">{p.id}</td>
+                      {!isPartner && <td className="px-4 py-3">{partner?.name}</td>}
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {p.commissionIds.length} commission(s)
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {new Date(p.requestedDate).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold">
+                        {fmtCurrency(p.amount)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={p.status} />
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {p.paidDate ? new Date(p.paidDate).toLocaleDateString() : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right space-x-1">
+                        <Button size="sm" variant="ghost" onClick={() => setViewId(p.id)}>
+                          View
                         </Button>
-                      )}
+                        {!isPartner && p.status === "Pending" && (
+                          <>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                approvePayout(p.id, user!.name);
+                                toast.success(`${p.id} approved`);
+                              }}
+                            >
+                              Approve
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setRejectId(p.id)}>
+                              Reject
+                            </Button>
+                          </>
+                        )}
+                        {!isPartner && p.status === "Approved" && (
+                          <Button size="sm" onClick={() => setPayId(p.id)}>
+                            Mark paid
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {list.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={isPartner ? 7 : 8}
+                      className="py-10 text-center text-muted-foreground"
+                    >
+                      No payout requests yet.
                     </td>
                   </tr>
-                );
-              })}
-              {list.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={isPartner ? 7 : 8}
-                    className="py-10 text-center text-muted-foreground"
-                  >
-                    No payout requests yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Card>
         <Card className="p-4 text-xs text-muted-foreground">
           Note: the portal tracks payout requests, approvals, rejections, and confirmations only. No

@@ -40,7 +40,6 @@ function AnnouncementsPage() {
     priority: "General" as AnnouncementPriority,
     target: "All partners",
     selectedPartners: "",
-    email: true,
   });
   const partner = user?.partnerId ? partners.find((p) => p.id === user.partnerId) : undefined;
   const visibleAnnouncements = useMemo(
@@ -127,11 +126,7 @@ function AnnouncementsPage() {
             { title: form.title.trim(), body: form.body.trim(), priority: form.priority, target },
             user!.name,
           );
-          toast.success(
-            form.email
-              ? "Announcement published. Email delivery needs provider configuration."
-              : "Announcement published",
-          );
+          toast.success("Announcement published");
           setOpen(false);
           setForm({
             title: "",
@@ -139,7 +134,6 @@ function AnnouncementsPage() {
             priority: "General",
             target: "All partners",
             selectedPartners: "",
-            email: true,
           });
         }}
       >
@@ -180,9 +174,9 @@ function AnnouncementsPage() {
             onChange={(e) => setForm({ ...form, target: e.target.value })}
           >
             <option>All partners</option>
-            <option>Partner tier</option>
-            <option>Specialist tier</option>
-            <option>Associate tier</option>
+            <option>All portal users</option>
+            <option>Admin users</option>
+            <option>Super Admin users</option>
             <option>APAC region</option>
             <option>EMEA region</option>
             <option>Americas region</option>
@@ -200,14 +194,6 @@ function AnnouncementsPage() {
             />
           </label>
         )}
-        <label className="flex items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            checked={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.checked })}
-          />
-          Also send via email
-        </label>
       </FormDialog>
     </>
   );

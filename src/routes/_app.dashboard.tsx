@@ -4,7 +4,7 @@ import { PageHeader, PageContainer, StatusBadge } from "@/components/layout/AppS
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store";
-import { fmtCurrency, daysSince } from "@/lib/mock-data";
+import { fmtCurrency, daysSince } from "@/lib/domain";
 import { isAnnouncementTargeted } from "@/lib/announcements";
 import type { ReactNode } from "react";
 import {
@@ -18,7 +18,6 @@ import {
   Briefcase,
   ArrowUpRight,
   FileText,
-  MessageSquare,
   type LucideIcon,
 } from "lucide-react";
 
@@ -63,22 +62,21 @@ function Dashboard() {
 }
 
 function AdminDash() {
-  const { partners, leads, commissions, payouts, activity, disputes, settings } = useStore();
+  const { partners, leads, commissions, payouts, activity, settings } = useStore();
   const activePartners = partners.filter((p) => p.status === "Active").length;
-  const tiers = { Associate: 0, Specialist: 0, Partner: 0 } as Record<string, number>;
-  partners.forEach((p) => {
-    tiers[p.tier]++;
-  });
-  const byStatus = { Active: 0, "Closed Won": 0, "Closed Lost": 0, "On Hold": 0 } as Record<
-    string,
-    number
-  >;
-  leads.forEach((l) => {
-    if (byStatus[l.status] !== undefined) byStatus[l.status]++;
-  });
-  const dupCount = leads.filter((l) => l.status === "Duplicate Under Review").length;
+  const byStatus = {
+    "In Progress": leads.filter(
+      (lead) =>
+        !["Closed Won", "Closed Lost"].includes(lead.stage) && lead.status !== "Duplicate Rejected",
+    ).length,
+    "Closed Won": leads.filter((lead) => lead.stage === "Closed Won").length,
+    "Closed Lost": leads.filter((lead) => lead.stage === "Closed Lost").length,
+    "On Hold": leads.filter((lead) => lead.stage === "On Hold").length,
+  };
   const pipelineValue = leads
-    .filter((l) => l.status === "Active")
+    .filter(
+      (l) => !["Closed Won", "Closed Lost"].includes(l.stage) && l.status !== "Duplicate Rejected",
+    )
     .reduce((s, l) => s + l.estimatedValue, 0);
   const commissionsYTD = commissions.reduce((s, c) => s + c.amount, 0);
   const owed = commissions
@@ -86,15 +84,17 @@ function AdminDash() {
     .reduce((s, c) => s + c.amount, 0);
   const pendingPayouts = payouts.filter((p) => p.status === "Pending");
   const stale = leads.filter(
-    (l) => l.status === "Active" && daysSince(l.lastActivity) >= settings.staleThreshold,
+    (l) =>
+      !["Closed Won", "Closed Lost"].includes(l.stage) &&
+      l.status !== "Duplicate Rejected" &&
+      daysSince(l.lastActivity) >= settings.staleThreshold,
   );
-  const openDisputes = disputes.filter((d) => d.status === "Open" || d.status === "Under Review");
 
   return (
     <>
       <PageHeader
         title="Dashboard"
-        description="Real-time view of the GTPP partner network."
+        description="Real-time view of the Global Partner Program."
         actions={
           <>
             <Link to="/pipeline">
@@ -124,14 +124,14 @@ function AdminDash() {
             label="Active Partners"
             value={activePartners}
             icon={Users}
-            hint={`${tiers.Partner} Partner · ${tiers.Specialist} Specialist · ${tiers.Associate} Associate`}
+            hint={`${partners.filter((partner) => partner.status === "Pending").length} pending onboarding`}
             accent="bg-info/10 text-info"
           />
           <Stat
             label="Pipeline Value"
             value={fmtCurrency(pipelineValue)}
             icon={TrendingUp}
-            hint={`${byStatus.Active} active leads`}
+            hint={`${byStatus["In Progress"]} in-progress leads`}
             accent="bg-brand/10 text-brand"
           />
           <Stat
@@ -169,20 +169,6 @@ function AdminDash() {
                 </div>
               ))}
             </div>
-            {dupCount > 0 && (
-              <div className="mt-3 flex items-center justify-between rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">
-                <span>
-                  {dupCount} lead{dupCount > 1 ? "s" : ""} awaiting duplicate review
-                </span>
-                <Link
-                  to="/leads"
-                  search={{ status: "Duplicate Under Review" }}
-                  className="text-xs font-medium text-brand hover:underline"
-                >
-                  Review →
-                </Link>
-              </div>
-            )}
           </Card>
 
           <Card className="p-5 shadow-card">
@@ -255,47 +241,20 @@ function AdminDash() {
           </Card>
 
           <Card className="p-5 shadow-card">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-semibold flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-destructive" />
-                Open disputes
-              </h3>
-              <Link to="/disputes" className="text-xs text-brand hover:underline">
-                Resolve →
-              </Link>
-            </div>
-            {openDisputes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No open disputes.</p>
-            ) : (
-              <ul className="divide-y">
-                {openDisputes.map((d) => {
-                  const partner = partners.find((p) => p.id === d.partnerId);
-                  return (
-                    <li key={d.id} className="py-2 text-sm">
-                      <div className="flex items-center justify-between">
-                        <Link to="/disputes" className="font-medium hover:underline">
-                          {d.id} · {d.commissionId}
-                        </Link>
-                        <StatusBadge
-                          status={
-                            d.status === "Under Review"
-                              ? "Pending"
-                              : d.status === "Open"
-                                ? "Disputed"
-                                : d.status === "Resolved"
-                                  ? "Paid"
-                                  : "Rejected"
-                          }
-                        />
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {partner?.name} · {new Date(d.openedDate).toLocaleDateString()}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            <h3 className="mb-3 font-semibold">Recent pipeline activity</h3>
+            <ul className="divide-y">
+              {activity.slice(0, 6).map((entry) => (
+                <li key={entry.id} className="py-2 text-sm">
+                  <div>{entry.text}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {entry.user} · {new Date(entry.date).toLocaleString()}
+                  </div>
+                </li>
+              ))}
+              {activity.length === 0 && (
+                <li className="text-sm text-muted-foreground">No activity yet.</li>
+              )}
+            </ul>
           </Card>
         </div>
 
@@ -327,15 +286,21 @@ function PartnerDash({ partnerId }: { partnerId: string }) {
   const myLeads = leads.filter((l) => l.partnerId === partnerId);
   const won = myLeads.filter((l) => l.status === "Closed Won").length;
   const lost = myLeads.filter((l) => l.status === "Closed Lost").length;
-  const active = myLeads.filter((l) => l.status === "Active").length;
+  const active = myLeads.filter(
+    (l) => !["Closed Won", "Closed Lost"].includes(l.stage) && l.status !== "Duplicate Rejected",
+  ).length;
   const pipeline = myLeads
-    .filter((l) => l.status === "Active")
+    .filter(
+      (l) => !["Closed Won", "Closed Lost"].includes(l.stage) && l.status !== "Duplicate Rejected",
+    )
     .reduce((s, l) => s + l.estimatedValue, 0);
   const myComm = commissions.filter((c) => c.partnerId === partnerId);
   const earned = myComm.reduce((s, c) => s + c.amount, 0);
-  const pending = myComm
-    .filter((c) => c.state === "Unpaid" || c.state === "Approved")
-    .reduce((s, c) => s + c.amount, 0);
+  const pending = myComm.reduce(
+    (sum, commission) =>
+      sum + Math.max(0, (commission.eligibleAmount || 0) - (commission.paidAmount || 0)),
+    0,
+  );
   const myPayouts = payouts
     .filter((p) => p.partnerId === partnerId)
     .sort((a, b) => b.requestedDate.localeCompare(a.requestedDate));
@@ -364,7 +329,7 @@ function PartnerDash({ partnerId }: { partnerId: string }) {
             <Link to="/leads">
               <Button variant="outline">View My Leads</Button>
             </Link>
-            <Link to="/request-payout">
+            <Link to="/commissions">
               <Button variant="outline">
                 <Wallet className="mr-2 h-4 w-4" />
                 Request Payout

@@ -4,27 +4,31 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
-import { fmtCurrency } from "@/lib/mock-data";
+import { fmtCurrency } from "@/lib/domain";
 import { toast } from "sonner";
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { FormDialog } from "@/components/common/dialogs";
+import { LEAD_STAGES } from "@/lib/program";
 
 export const Route = createFileRoute("/_app/client-payments")({ component: ClientPayments });
 
 function ClientPayments() {
   const { user } = useAuth();
   const { leads, clientPayments, recordClientPayment } = useStore();
-  const wonLeads = leads.filter((l) => l.stage === "Closed Won");
+  const paymentStageIndex = LEAD_STAGES.indexOf("Advance Confirmed");
+  const eligibleLeads = leads.filter(
+    (lead) => LEAD_STAGES.indexOf(lead.stage) >= paymentStageIndex,
+  );
   const [open, setOpen] = useState(false);
   const empty = {
-    leadId: wonLeads[0]?.id || "",
+    leadId: eligibleLeads[0]?.id || "",
+    paymentType: "Advance" as "Advance" | "Final",
     amount: "",
     date: new Date().toISOString().slice(0, 10),
     reference: "",
     method: "Wire Transfer",
     notes: "",
-    triggerEligibility: false,
   };
   const [form, setForm] = useState(empty);
   if (user?.role === "partner") return <Navigate to="/access-denied" />;
@@ -33,9 +37,9 @@ function ClientPayments() {
     <>
       <PageHeader
         title="Client Payments"
-        description="Record payments received from clients against won deals. Eligibility must be triggered explicitly."
+        description="Record confirmed advance and final payments against pipeline deals."
         actions={
-          <Button onClick={() => setOpen(true)} disabled={wonLeads.length === 0}>
+          <Button onClick={() => setOpen(true)} disabled={eligibleLeads.length === 0}>
             <Plus className="mr-2 h-4 w-4" />
             Record payment
           </Button>
@@ -43,40 +47,94 @@ function ClientPayments() {
       />
       <PageContainer>
         <Card className="shadow-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 text-left">Reference</th>
-                <th className="px-4 py-3 text-left">Deal</th>
-                <th className="px-4 py-3 text-left">Date</th>
-                <th className="px-4 py-3 text-right">Amount</th>
-                <th className="px-4 py-3 text-left">Method</th>
-                <th className="px-4 py-3 text-left">Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clientPayments.map((cp) => {
-                const lead = leads.find((l) => l.id === cp.leadId);
-                return (
-                  <tr key={cp.id} className="border-t hover:bg-accent/20">
-                    <td className="px-4 py-3 font-medium">{cp.reference}</td>
-                    <td className="px-4 py-3">{lead?.company || cp.leadId}</td>
-                    <td className="px-4 py-3 text-xs">{new Date(cp.date).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 text-right font-semibold">{fmtCurrency(cp.amount)}</td>
-                    <td className="px-4 py-3">{cp.method}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{cp.notes}</td>
-                  </tr>
-                );
-              })}
-              {clientPayments.length === 0 && (
+          <div className="border-b bg-accent/40 px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Deal payment summary
+          </div>
+          <div className="responsive-table-scroll">
+            <table className="min-w-[760px] w-full whitespace-nowrap text-sm">
+              <thead>
                 <tr>
-                  <td colSpan={6} className="py-10 text-center text-muted-foreground">
-                    No client payments recorded yet.
-                  </td>
+                  <th className="px-4 py-3 text-left">Deal</th>
+                  <th className="px-4 py-3 text-right">Advance</th>
+                  <th className="px-4 py-3 text-right">Final</th>
+                  <th className="px-4 py-3 text-right">Total received</th>
+                  <th className="px-4 py-3 text-right">Outstanding</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {eligibleLeads.map((lead) => {
+                  const payments = clientPayments.filter((payment) => payment.leadId === lead.id);
+                  const advance = payments
+                    .filter((payment) => payment.paymentType === "Advance")
+                    .reduce((sum, payment) => sum + payment.amount, 0);
+                  const final = payments
+                    .filter((payment) => payment.paymentType === "Final")
+                    .reduce((sum, payment) => sum + payment.amount, 0);
+                  const total = advance + final;
+                  return (
+                    <tr key={lead.id} className="border-t">
+                      <td className="px-4 py-3 font-medium">{lead.company}</td>
+                      <td className="px-4 py-3 text-right">
+                        {fmtCurrency(advance, lead.currency)}
+                      </td>
+                      <td className="px-4 py-3 text-right">{fmtCurrency(final, lead.currency)}</td>
+                      <td className="px-4 py-3 text-right">{fmtCurrency(total, lead.currency)}</td>
+                      <td className="px-4 py-3 text-right">
+                        {fmtCurrency(
+                          Math.max(0, (lead.confirmedValue || lead.estimatedValue) - total),
+                          lead.currency,
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+        <Card className="shadow-card overflow-hidden">
+          <div className="responsive-table-scroll">
+            <table className="min-w-[980px] w-full whitespace-nowrap text-sm">
+              <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left">Reference</th>
+                  <th className="px-4 py-3 text-left">Deal</th>
+                  <th className="px-4 py-3 text-left">Date</th>
+                  <th className="px-4 py-3 text-left">Type</th>
+                  <th className="px-4 py-3 text-right">Amount</th>
+                  <th className="px-4 py-3 text-left">Method</th>
+                  <th className="px-4 py-3 text-left">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clientPayments.map((cp) => {
+                  const lead = leads.find((l) => l.id === cp.leadId);
+                  return (
+                    <tr key={cp.id} className="border-t hover:bg-accent/20">
+                      <td className="px-4 py-3 font-medium">{cp.reference}</td>
+                      <td className="px-4 py-3">{lead?.company || cp.leadId}</td>
+                      <td className="px-4 py-3 text-xs">
+                        {new Date(cp.date).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3">{cp.paymentType || "—"}</td>
+                      <td className="px-4 py-3 text-right font-semibold">
+                        {fmtCurrency(cp.amount)}
+                      </td>
+                      <td className="px-4 py-3">{cp.method}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{cp.notes}</td>
+                    </tr>
+                  );
+                })}
+                {clientPayments.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-10 text-center text-muted-foreground">
+                      No client payments recorded yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Card>
         <Card className="p-4 text-xs text-muted-foreground">
           Installment example: large deals can have multiple records — each row represents one
@@ -108,14 +166,12 @@ function ClientPayments() {
               reference: form.reference,
               method: form.method,
               notes: form.notes,
-              triggerEligibility: form.triggerEligibility,
+              paymentType: form.paymentType,
             },
             user!.name,
           );
           toast.success(
-            form.triggerEligibility
-              ? "Payment recorded and commission eligibility triggered."
-              : "Payment recorded without changing commission eligibility.",
+            `${form.paymentType} payment recorded and commission eligibility triggered.`,
           );
           setOpen(false);
           setForm(empty);
@@ -128,11 +184,35 @@ function ClientPayments() {
             value={form.leadId}
             onChange={(e) => setForm({ ...form, leadId: e.target.value })}
           >
-            {wonLeads.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.company}
-              </option>
-            ))}
+            {eligibleLeads
+              .filter((lead) =>
+                form.paymentType === "Advance"
+                  ? LEAD_STAGES.indexOf(lead.stage) >= LEAD_STAGES.indexOf("Advance Confirmed")
+                  : LEAD_STAGES.indexOf(lead.stage) >=
+                    LEAD_STAGES.indexOf("Final Payment Clearance"),
+              )
+              .map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.company}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label className="text-xs">
+          Payment type
+          <select
+            className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+            value={form.paymentType}
+            onChange={(event) =>
+              setForm({
+                ...form,
+                paymentType: event.target.value as "Advance" | "Final",
+                leadId: "",
+              })
+            }
+          >
+            <option>Advance</option>
+            <option>Final</option>
           </select>
         </label>
         <div className="grid grid-cols-2 gap-2">
@@ -186,20 +266,10 @@ function ClientPayments() {
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
           />
         </label>
-        <label className="flex items-start gap-2 rounded-md border bg-accent/20 p-3 text-sm">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={form.triggerEligibility}
-            onChange={(e) => setForm({ ...form, triggerEligibility: e.target.checked })}
-          />
-          <span>
-            <span className="font-medium">Trigger commission eligibility</span>
-            <span className="block text-xs text-muted-foreground">
-              Leave unchecked to record this payment without making commissions payable.
-            </span>
-          </span>
-        </label>
+        <div className="rounded-md border bg-accent/20 p-3 text-xs text-muted-foreground">
+          Confirmed client payments automatically trigger the proportional commission amount for
+          payout.
+        </div>
       </FormDialog>
     </>
   );

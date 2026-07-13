@@ -1,10 +1,10 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
-import { PageHeader, PageContainer, StatusBadge, TierBadge } from "@/components/layout/AppShell";
+import { PageHeader, PageContainer, StatusBadge } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useStore, type PartnerDocument } from "@/lib/store";
-import { ONBOARDING_STEPS, fmtCurrency, type Partner } from "@/lib/mock-data";
+import { ONBOARDING_STEPS, fmtCurrency, type Partner } from "@/lib/domain";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
@@ -35,7 +35,7 @@ function PartnerDetail() {
       id: "n1",
       user: "Marcus Reid",
       date: "2025-06-12",
-      text: "Excellent activation. Strong APAC enterprise pipeline. Consider tier upgrade after Q3.",
+      text: "Excellent activation with a strong APAC enterprise pipeline.",
     },
     {
       id: "n2",
@@ -58,7 +58,6 @@ function PartnerDetail() {
     assignedContact: "",
   });
   const [commercialForm, setCommercialForm] = useState({
-    tier: "Associate",
     rate: "",
     status: "Active",
   });
@@ -96,7 +95,6 @@ function PartnerDetail() {
 
   const openCommercial = () => {
     setCommercialForm({
-      tier: partner.tier,
       rate: String(partner.commissionRate),
       status: partner.status,
     });
@@ -155,7 +153,6 @@ function PartnerDetail() {
               <div>
                 <h2 className="text-lg font-semibold">{partner.name}</h2>
                 <div className="mt-1 flex gap-2">
-                  <TierBadge tier={partner.tier} />
                   <StatusBadge status={partner.status} />
                 </div>
               </div>
@@ -248,43 +245,47 @@ function PartnerDetail() {
 
               <TabsContent value="leads">
                 <Card className="shadow-card overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
-                      <tr>
-                        <th className="px-4 py-3 text-left">Company</th>
-                        <th className="px-4 py-3 text-left">Stage</th>
-                        <th className="px-4 py-3 text-left">Status</th>
-                        <th className="px-4 py-3 text-right">Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leads.map((l) => (
-                        <tr key={l.id} className="border-t hover:bg-accent/20">
-                          <td className="px-4 py-3">
-                            <Link
-                              to="/leads/$id"
-                              params={{ id: l.id }}
-                              className="font-medium hover:underline"
-                            >
-                              {l.company}
-                            </Link>
-                          </td>
-                          <td className="px-4 py-3">{l.stage}</td>
-                          <td className="px-4 py-3">
-                            <StatusBadge status={l.status} />
-                          </td>
-                          <td className="px-4 py-3 text-right">{fmtCurrency(l.estimatedValue)}</td>
-                        </tr>
-                      ))}
-                      {leads.length === 0 && (
+                  <div className="responsive-table-scroll">
+                    <table className="min-w-[680px] w-full whitespace-nowrap text-sm">
+                      <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
                         <tr>
-                          <td colSpan={4} className="py-8 text-center text-muted-foreground">
-                            No leads yet.
-                          </td>
+                          <th className="px-4 py-3 text-left">Company</th>
+                          <th className="px-4 py-3 text-left">Stage</th>
+                          <th className="px-4 py-3 text-left">Status</th>
+                          <th className="px-4 py-3 text-right">Value</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {leads.map((l) => (
+                          <tr key={l.id} className="border-t hover:bg-accent/20">
+                            <td className="px-4 py-3">
+                              <Link
+                                to="/leads/$id"
+                                params={{ id: l.id }}
+                                className="font-medium hover:underline"
+                              >
+                                {l.company}
+                              </Link>
+                            </td>
+                            <td className="px-4 py-3">{l.stage}</td>
+                            <td className="px-4 py-3">
+                              <StatusBadge status={l.status} />
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {fmtCurrency(l.estimatedValue)}
+                            </td>
+                          </tr>
+                        ))}
+                        {leads.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                              No leads yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </Card>
               </TabsContent>
 
@@ -505,10 +506,8 @@ function PartnerDetail() {
         onOpenChange={setCommercialOpen}
         title="Commercial settings"
         submitLabel="Save settings"
-        canSubmit={!!commercialForm.tier && Number(commercialForm.rate) > 0}
+        canSubmit={Number(commercialForm.rate) > 0}
         onSubmit={() => {
-          if (commercialForm.tier !== partner.tier)
-            store.changePartnerTier(partner.id, commercialForm.tier, user!.name);
           if (Number(commercialForm.rate) !== partner.commissionRate)
             store.changePartnerRate(partner.id, Number(commercialForm.rate), user!.name);
           if (user!.role === "super_admin" && commercialForm.status !== partner.status) {
@@ -522,18 +521,6 @@ function PartnerDetail() {
           setCommercialOpen(false);
         }}
       >
-        <label className="text-xs">
-          GTPP tier
-          <select
-            className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
-            value={commercialForm.tier}
-            onChange={(e) => setCommercialForm({ ...commercialForm, tier: e.target.value })}
-          >
-            <option>Associate</option>
-            <option>Specialist</option>
-            <option>Partner</option>
-          </select>
-        </label>
         <label className="text-xs">
           Commission rate (%)
           <input

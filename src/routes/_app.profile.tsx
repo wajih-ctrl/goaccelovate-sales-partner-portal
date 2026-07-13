@@ -1,10 +1,10 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
-import { PageHeader, PageContainer, StatusBadge, TierBadge } from "@/components/layout/AppShell";
+import { PageHeader, PageContainer, StatusBadge } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
-import type { Partner } from "@/lib/mock-data";
+import type { Partner } from "@/lib/domain";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 
@@ -96,7 +96,6 @@ function Profile() {
             <div>
               <h2 className="font-semibold">{p.name}</h2>
               <div className="mt-2 flex justify-center gap-2">
-                <TierBadge tier={p.tier} />
                 <StatusBadge status={p.status} />
               </div>
             </div>
@@ -111,7 +110,7 @@ function Profile() {
                 <strong>Joined:</strong> {new Date(p.joinedDate).toLocaleDateString()}
               </div>
               <div className="mt-1 text-muted-foreground">
-                Tier, commission rate and account manager are managed by GoAccelovate.
+                Commission rate and account manager are managed by Go Accelerate.
               </div>
             </div>
           </Card>

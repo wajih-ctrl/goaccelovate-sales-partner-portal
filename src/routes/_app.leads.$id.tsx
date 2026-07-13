@@ -4,33 +4,17 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
-import { fmtCurrency, type LeadStage, type LeadStatus } from "@/lib/mock-data";
+import { fmtCurrency, type LeadStage } from "@/lib/domain";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useState } from "react";
-import { ArrowLeft, Lock, MessageSquare, Phone, FileUp, Activity, Check, X } from "lucide-react";
+import { ArrowLeft, Lock, MessageSquare, Phone, FileUp, Activity } from "lucide-react";
 import { FormDialog, ReasonDialog } from "@/components/common/dialogs";
+import { canMoveLeadStage, isCommercialStage, LEAD_STAGES } from "@/lib/program";
 
 export const Route = createFileRoute("/_app/leads/$id")({ component: LeadDetail });
 
-const STAGES: LeadStage[] = [
-  "New Lead",
-  "In Conversation",
-  "Discovery Call",
-  "Proposal Sent",
-  "Negotiation",
-  "Closed Won",
-  "Closed Lost",
-];
-const STATUSES: LeadStatus[] = [
-  "Active",
-  "On Hold",
-  "Closed Won",
-  "Closed Lost",
-  "Disqualified",
-  "Reopened",
-];
-const REASON_REQUIRED_STATUSES = new Set<LeadStatus>(["Closed Lost", "Disqualified", "Reopened"]);
+const STAGES: LeadStage[] = LEAD_STAGES;
 
 function LeadDetail() {
   const { id } = Route.useParams();
@@ -39,12 +23,11 @@ function LeadDetail() {
   const lead = store.leads.find((l) => l.id === id);
   const [comment, setComment] = useState("");
   const [showCall, setShowCall] = useState(false);
-  const [showApproveDuplicate, setShowApproveDuplicate] = useState(false);
-  const [showReject, setShowReject] = useState(false);
   const [showCloseWon, setShowCloseWon] = useState(false);
   const [pendingStage, setPendingStage] = useState<LeadStage | null>(null);
-  const [pendingStatus, setPendingStatus] = useState<LeadStatus | null>(null);
   const [confirmedValue, setConfirmedValue] = useState("");
+  const [showEstimatedValue, setShowEstimatedValue] = useState(false);
+  const [estimatedValue, setEstimatedValue] = useState("");
   const [attachmentPrivate, setAttachmentPrivate] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [call, setCall] = useState({
@@ -73,7 +56,7 @@ function LeadDetail() {
   const calls = store.calls.filter((c) => c.leadId === id && (!c.private || isAdmin));
   const commission = store.commissions.find((c) => c.leadId === id);
   const files = store.attachments[id] || [];
-  const dup = lead.status === "Duplicate Under Review";
+  const dup = lead.status === "Duplicate Rejected";
 
   const post = (priv: boolean) => {
     if (!comment.trim()) {
@@ -138,6 +121,10 @@ function LeadDetail() {
   };
 
   const changeStage = (stage: LeadStage) => {
+    if (!user || !canMoveLeadStage(user.role, lead.stage, stage, lead.previousStage)) {
+      toast.error("Your role cannot move this lead to that stage.");
+      return;
+    }
     if (stage === "Closed Won" && lead.stage !== "Closed Won" && !lead.confirmedValue) {
       setConfirmedValue(String(lead.estimatedValue));
       setShowCloseWon(true);
@@ -148,14 +135,6 @@ function LeadDetail() {
       return;
     }
     store.updateLeadStage(id, stage, user!.name);
-  };
-
-  const changeStatus = (status: LeadStatus) => {
-    if (status !== lead.status && REASON_REQUIRED_STATUSES.has(status)) {
-      setPendingStatus(status);
-      return;
-    }
-    store.updateLeadStatus(id, status, user!.name);
   };
 
   return (
@@ -171,49 +150,35 @@ function LeadDetail() {
                 Back
               </Button>
             </Link>
-            {isAdmin && (
-              <>
-                <select
-                  value={lead.stage}
-                  onChange={(e) => changeStage(e.target.value as LeadStage)}
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
-                >
-                  {STAGES.map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </select>
-                <select
-                  value={lead.status}
-                  onChange={(e) => changeStatus(e.target.value as LeadStatus)}
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </select>
-              </>
+            {!dup && (
+              <select
+                value={lead.stage}
+                onChange={(e) => changeStage(e.target.value as LeadStage)}
+                className="h-9 max-w-full rounded-md border bg-background px-3 text-sm"
+              >
+                {STAGES.filter(
+                  (stage) =>
+                    stage === lead.stage ||
+                    Boolean(
+                      user && canMoveLeadStage(user.role, lead.stage, stage, lead.previousStage),
+                    ),
+                ).map((stage) => (
+                  <option key={stage}>{stage}</option>
+                ))}
+              </select>
             )}
           </>
         }
       />
       <PageContainer>
-        {dup && isAdmin && (
-          <Card className="flex flex-wrap items-center justify-between gap-3 border-warning/40 bg-warning/10 p-4 text-sm">
+        {dup && (
+          <Card className="border-warning/40 bg-warning/10 p-4 text-sm">
             <div>
-              <div className="font-semibold">Duplicate Under Review</div>
+              <div className="font-semibold">Duplicate Rejected</div>
               <div className="text-xs text-muted-foreground">
-                A potential match exists. Accept into pipeline or reject as duplicate.
+                {lead.duplicateReason ||
+                  "This lead matched an existing company or contact and did not enter the pipeline."}
               </div>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={() => setShowApproveDuplicate(true)}>
-                <Check className="mr-1 h-4 w-4" />
-                Accept
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setShowReject(true)}>
-                <X className="mr-1 h-4 w-4" />
-                Reject
-              </Button>
             </div>
           </Card>
         )}
@@ -234,6 +199,19 @@ function LeadDetail() {
               <div className="mt-1 text-xl font-semibold">
                 {fmtCurrency(lead.estimatedValue, lead.currency)}
               </div>
+              {isAdmin && isCommercialStage(lead.stage) && (
+                <Button
+                  className="mt-2"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setEstimatedValue(String(lead.estimatedValue));
+                    setShowEstimatedValue(true);
+                  }}
+                >
+                  Update commercial value
+                </Button>
+              )}
               {lead.confirmedValue && isAdmin && (
                 <div className="text-xs text-success">
                   Confirmed: {fmtCurrency(lead.confirmedValue, lead.currency)}
@@ -250,6 +228,16 @@ function LeadDetail() {
               <div className="text-xs uppercase tracking-wider text-muted-foreground">Contact</div>
               <div className="mt-1 text-sm">{lead.contactEmail}</div>
               <div className="text-sm">{lead.contactPhone}</div>
+              {lead.clientLinkedin && (
+                <a
+                  className="text-sm text-brand hover:underline"
+                  href={lead.clientLinkedin}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Client LinkedIn
+                </a>
+              )}
             </div>
             <div className="border-t pt-3">
               <div className="text-xs uppercase tracking-wider text-muted-foreground">Industry</div>
@@ -633,45 +621,29 @@ function LeadDetail() {
         }}
       />
 
-      <ReasonDialog
-        open={!!pendingStatus}
-        onOpenChange={(b) => !b && setPendingStatus(null)}
-        title={`Set status to ${pendingStatus || "status"}`}
-        description="Provide the reason for this status change. It will be visible in the lead timeline and audit trail."
-        confirmLabel="Save status change"
-        destructive={false}
-        onConfirm={(reason) => {
-          if (!pendingStatus) return;
-          store.updateLeadStatus(id, pendingStatus, user!.name, reason);
-          toast.warning(`Lead marked ${pendingStatus}`);
-          setPendingStatus(null);
+      <FormDialog
+        open={showEstimatedValue}
+        onOpenChange={setShowEstimatedValue}
+        title="Update estimated deal value"
+        submitLabel="Save value"
+        canSubmit={Number(estimatedValue) > 0}
+        onSubmit={() => {
+          store.updateEstimatedValue(id, Number(estimatedValue), user!.name);
+          toast.success("Estimated deal value updated");
+          setShowEstimatedValue(false);
         }}
-      />
-
-      <ReasonDialog
-        open={showApproveDuplicate}
-        onOpenChange={setShowApproveDuplicate}
-        title="Override and allow duplicate"
-        description="Explain why this potential duplicate is allowed into the pipeline. The reason is saved to the activity log and audit log."
-        confirmLabel="Allow duplicate"
-        destructive={false}
-        onConfirm={(reason) => {
-          store.approveDuplicate(id, user!.name, reason);
-          toast.success("Accepted into pipeline");
-        }}
-      />
-
-      <ReasonDialog
-        open={showReject}
-        onOpenChange={setShowReject}
-        title="Reject as duplicate"
-        description="Explain why this lead is being rejected as a duplicate. The partner will see this reason."
-        confirmLabel="Reject duplicate"
-        onConfirm={(reason) => {
-          store.rejectDuplicate(id, user!.name, reason);
-          toast.warning("Duplicate rejected");
-        }}
-      />
+      >
+        <label className="text-xs">
+          Commercial value ({lead.currency})
+          <input
+            type="number"
+            min="0.01"
+            className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+            value={estimatedValue}
+            onChange={(event) => setEstimatedValue(event.target.value)}
+          />
+        </label>
+      </FormDialog>
     </>
   );
 }

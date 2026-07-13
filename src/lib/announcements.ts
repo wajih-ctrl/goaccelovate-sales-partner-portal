@@ -1,4 +1,4 @@
-import type { Announcement, Partner } from "./mock-data";
+import type { Announcement, Partner } from "./domain";
 
 export const REGION_COUNTRIES: Record<string, string[]> = {
   "APAC region": ["India", "Japan", "Vietnam", "China", "South Korea", "UAE"],
@@ -23,8 +23,10 @@ export const REGION_COUNTRIES: Record<string, string[]> = {
 
 export function isAnnouncementTargeted(a: Announcement, partner?: Partner) {
   if (!partner) return false;
-  if (a.target === "All partners") return true;
-  if (a.target === `${partner.tier} tier`) return true;
+  if (["All partners", "all_partners", "All portal users", "all_users"].includes(a.target))
+    return true;
+  // Canonical database targets are already filtered for partners by Supabase RLS.
+  if (["region", "selected_partners"].includes(a.target)) return true;
   if (REGION_COUNTRIES[a.target]?.includes(partner.country)) return true;
   if (a.target.startsWith("Selected partners:")) {
     const selected = a.target.replace("Selected partners:", "").toLowerCase();

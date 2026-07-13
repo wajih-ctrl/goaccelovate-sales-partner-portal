@@ -1,248 +1,131 @@
-# GoAccelovate GTPP Sales Partner Portal Guide
+# Go Accelerate Global Partner Program Guide
 
-This guide explains how the portal works for Super Admins, Admins, and Sales Partners.
+This guide explains the approved portal workflow for Super Admins, Admins, and Sales Partners.
 
-## Purpose
+## Roles And Access
 
-The portal is a private sales partner system for managing partner accounts, submitted leads, pipeline progress, commissions, payouts, disputes, announcements, documents, reports, settings, and audit history.
+- Sales Partners access only their own profile, leads, visible files and calls, commissions, payout history, and targeted announcements.
+- Admins manage Sales Partners, operational leads, pipeline stages, calls, files, payments, commissions, payouts, announcements, and operational reports.
+- Super Admins have Admin access plus Admin invitations, account lifecycle controls, program settings, agreement publishing, and the audit log.
 
-The core rule is role separation:
+Authentication uses real Supabase Auth accounts. No demo login is included in production code.
 
-- Sales Partners can only access their own profile, leads, commissions, payouts, allowed documents, visible discovery calls, visible announcements, and own reports.
-- Admins can manage operational sales activity, pipeline, commissions, payouts, client payment eligibility, lead attachments, discovery calls, announcements, and reports.
-- Super Admins can do everything Admins can do, plus user lifecycle management, settings, audit log access, and Super Admin-only reports.
+## Invitations And Agreements
 
-## Login And Accounts
+Admin and Super Admin can invite a Sales Partner. A commission percentage is required before sending the invitation. Only Super Admin can invite an Admin, revoke/delete an invitation, change roles, suspend, reinstate, or deactivate an account.
 
-Users sign in with Supabase Auth in real mode. Demo login is only available when `VITE_ENABLE_DEMO_LOGIN=true`.
+New Sales Partners cannot enter the operating portal until they sign the current Partner Agreement and NDA:
 
-Super Admin controls access from User Management:
+1. Super Admin publishes secure PDF URLs in Settings.
+2. The invitation recipient sets a password and opens onboarding.
+3. The partner reads both documents, enters their legal name, confirms the e-signature, and signs.
+4. The portal records the user, partner, document version, signer name, and timestamp.
+5. Publishing a new document version requires affected partners to sign again.
 
-1. Open `User Management`.
-2. Click `Invite user`.
-3. Enter name, email, role, and partner tier if inviting a Sales Partner.
-4. Supabase sends the invite email.
-5. The portal records the invitation for tracking.
-6. The invited user accepts the email invite and sets their password.
+Do not invite production partners before final Agreement and NDA PDFs are published.
 
-Revoking an invitation removes the pending invitation from Supabase and records an audit entry. Pending partner profiles created by the invite are deactivated if the invite is revoked before acceptance.
+## Partner Lead Workflow
 
-Suspended or deactivated users are blocked by the auth/profile status check.
+Partners open `My Leads` and use the top-right `Submit Lead` button. The form includes company, contact, job title, email, optional phone, client LinkedIn URL, country, industry, estimated value and currency, and a 50-character to 1,000-word relationship message. Allowed attachments can be uploaded.
 
-## Sales Partner Workflow
+Validation and duplicate detection run server-side:
 
-Sales Partners use the portal to manage their own relationship with GoAccelovate.
+- Invalid or incomplete forms are not saved.
+- A matching company name or contact email is saved as `Duplicate Rejected` and does not enter the active pipeline.
+- A valid lead enters `Identified Opportunity` immediately and Admin users are notified.
 
-Main partner actions:
+Partners can view their leads as a table or Kanban board, edit estimated value before the commercial stages, move only partner-controlled stages, add public updates, and delete their own lead while no commission exists.
 
-- View dashboard metrics for their own leads, pipeline value, commissions, payout status, recent lead activity, and announcements.
-- Open `My Profile` to update basic personal and professional information.
-- Submit a lead using `Submit Lead`.
-- Upload allowed lead attachments during submission when enabled by the form.
-- View their own lead list and lead details.
-- Add partner-visible updates to their own leads.
-- View visible discovery calls connected to their own leads.
-- View their own commission statement.
-- Request payout for payable commissions.
-- Open a commission dispute.
-- Read announcements targeted to them.
-- Export their own allowed reports.
+## Pipeline
 
-Partners cannot:
+The fixed stages are:
 
-- See another partner's leads, commissions, payouts, documents, private notes, private discovery calls, client payment details, admin reports, or audit log.
-- Change lead stage or lead status.
-- Change commission fields.
-- Manage users, settings, pipeline stages, payouts, or admin-only documents.
+1. Identified Opportunity
+2. Outreach Started
+3. In Communication
+4. Discovery Call
+5. On Hold
+6. Contract Sent
+7. Advance Pending
+8. Advance Confirmed
+9. Sent to Product
+10. Done by Product
+11. Client Review
+12. Under Revisions
+13. Final Payment Clearance
+14. Final Handoff
+15. Closed Won
+16. Closed Lost
 
-## Admin Workflow
+Partners control the first four stages and can mark a lead Closed Lost. Admin controls later stages and can also mark Closed Lost. Putting a lead On Hold records its previous stage; resuming returns it to that stage. Calls and their attachments are managed inside lead detail, not on a separate screen.
 
-Admins manage sales operations after partners submit leads.
+From Contract/Proposal Sent onward, Admin can update the commercial value. Closing a lead as won uses the confirmed deal value for commission calculation.
 
-Main admin actions:
+## Payments And Commissions
 
-- View all operational leads and pipeline status.
-- Use Pipeline Kanban or Pipeline List to move leads through stages.
-- Review duplicate leads and provide required reasons for reject or override.
-- Add discovery call records and mark them public or private.
-- Upload lead attachments and choose visibility.
-- Move a lead to Closed Won and enter confirmed deal value.
-- Review calculated commission records.
-- Log client payments.
-- Explicitly select `Trigger commission eligibility` when a payment should make the commission payable.
-- Review, approve, reject, and record external payout payments.
-- Resolve commission disputes.
-- Publish announcements to all partners, tiers, regions, or selected partners.
-- Export role-safe operational reports.
+Client payment details are Admin-only. Admin records either:
 
-Admins cannot perform Super Admin-only lifecycle actions such as changing privileged roles, suspending Admin users if blocked by policy, or viewing the Super Admin audit log when the route/RLS denies it.
+- `Advance` from Advance Confirmed onward.
+- `Final` from Final Payment Clearance onward.
 
-## Super Admin Workflow
+Recording an eligible payment releases the proportional commission amount. An advance payment releases only its share; the final payment releases the remaining share up to the calculated commission total. Partners see earned, payable/pending, and paid commission amounts, but never the client's payment records.
 
-Super Admins control platform administration.
+The partner selects payable commission items in `My Commissions` and requests one payout. Admin approves or rejects it with a reason. After external payment, Admin records the date, method, and transaction reference. The commission paid balance and partner notification update atomically.
 
-Main Super Admin actions:
+Commission disputes and the separate payout navigation are not part of this program version.
 
-- Invite Admins and Sales Partners.
-- View pending invitations.
-- Revoke pending invitations.
-- Change roles where allowed.
-- Suspend, reinstate, or deactivate accounts.
-- Manage partner tiers and commission rates.
-- Manage global settings.
-- Confirm setting changes that affect records.
-- View and export the audit log.
-- Run all Admin operational workflows.
+## Announcements And Reports
 
-Every major account, setting, commission, payout, dispute, and pipeline action should create an audit log entry.
+Announcements can target all partners, all users, Admins, Super Admins, regions, or selected partners. RLS determines who can read each announcement.
 
-## Lead Lifecycle
+Admin and Super Admin reports include operational pipeline, partner, commission, payout, and client revenue data. Super Admin alone can access the audit log. Partner export actions are intentionally removed; partner data remains available in their own portal views.
 
-1. Sales Partner submits a lead.
-2. Server-side validation checks required fields and duplicate risk.
-3. Valid leads enter the pipeline without manual approval.
-4. Duplicate-risk leads are flagged for Admin review.
-5. Admin either rejects as duplicate or overrides and allows the lead, with a required reason.
-6. Admin moves the lead through pipeline stages.
-7. Partner can track only their own lead status.
-8. Closed Won creates or updates commission records.
+## Files And Privacy
 
-Pipeline stages and labels are configurable by Super Admin settings.
+Supabase Storage buckets are private. Metadata is created only after a successful binary upload. Supported formats and size limits are validated before upload.
 
-## Commissions And Payouts
+- Partner-visible files can be read only by the owning partner and Admin users.
+- Internal/private files are Admin-only.
+- Partners cannot read files for another partner's lead.
+- Deleting a partner-owned lead also deletes its uploaded files when permitted.
+- Signed download URLs are short-lived.
 
-Commission is calculated from the confirmed deal value and the partner commission rate.
+## Account Lifecycle
 
-Client payments do not automatically make a commission payable. Admin must explicitly trigger commission eligibility while logging the client payment, or use the eligibility action provided in the payment/commission workflow. This protects the business while installment rules are still evolving.
+Suspended and deactivated accounts are rejected by the portal after authentication. Super Admin lifecycle changes create audit entries and mandatory in-app notifications. Sign-out always clears the session and returns to login.
 
-Partner payout flow:
+Supabase Auth sends invitation and password-reset emails. General announcement and event emails require a configured server-side provider such as Resend or SMTP; in-app notifications remain the authoritative delivery channel until that provider is configured and tested.
 
-1. Partner sees payable commissions.
-2. Partner requests payout.
-3. Admin approves or rejects the payout.
-4. Finance pays externally.
-5. Admin records external payment details.
-6. Partner sees the payout as paid.
+## Production Configuration
 
-Partners never see client payment details.
-
-## Documents And Storage
-
-Supabase Storage is used for real file uploads.
-
-Supported file areas:
-
-- Partner documents
-- Lead attachments
-- Discovery call attachments
-
-Visibility rules:
-
-- Partner-visible files can be viewed by the owning partner and Admin/Super Admin.
-- Private/internal files are Admin/Super Admin only.
-- Partners cannot access files attached to another partner's records.
-- File metadata is stored only after upload succeeds.
-
-Storage bucket policies must remain aligned with the RLS rules. Do not expose service-role keys in frontend code.
-
-## Announcements And Notifications
-
-In-app notifications are stored in Supabase and shown inside the portal.
-
-Real email status:
-
-- Supabase Auth invite emails are sent by Supabase Auth.
-- Supabase password reset emails are sent by Supabase Auth.
-- General notification emails and announcement emails need a server-side email provider such as Resend or SMTP before they are production-live.
-- Add `RESEND_API_KEY` and `NOTIFICATION_FROM_EMAIL` server-side when an outbound email sender is implemented.
-- Critical account and payout events should remain mandatory and should not be disabled by user preferences once email delivery is wired.
-
-Until an outbound provider is configured and tested, do not claim that general notification emails are fully live.
-
-## Reports
-
-Reports must be role-safe.
-
-Admin/Super Admin reports:
-
-- All Partners Overview
-- Full Pipeline Report
-- Commission Liability Report
-- Payout History
-- Client Revenue Attribution
-
-Partner reports:
-
-- My Leads Report
-- My Commission Statement
-
-Partners must only export their own data. Super Admin can export the audit log. Admin-wide data must never be generated for a partner user.
-
-## Settings
-
-Super Admin settings include:
-
-- Commission rates by tier
-- Pipeline stage labels
-- Supported currencies
-- Partner tier labels
-- Lead staleness threshold
-- Payout window
-- Onboarding checklist steps
-- Invitation expiry
-
-Settings that affect existing or future records require confirmation before saving and must create an audit log entry with old and new values.
-
-## Security Checklist
-
-Production readiness depends on these checks passing:
-
-- No `SUPABASE_SERVICE_ROLE_KEY` in frontend/browser code.
-- RLS prevents partners from reading or updating other partners' data.
-- Partners cannot read client payments, private notes, private/internal files, admin reports, or audit log.
-- Admin can access operational data.
-- Super Admin can access all administrative data.
-- Storage signed URLs respect visibility and ownership.
-- Suspended and deactivated users cannot continue using the portal.
-- Demo mode is disabled in production.
-
-## Local Development
-
-Common commands:
-
-```bash
-npm install
-npm run dev
-npm run build
-npx tsc --noEmit
-npx eslint <changed-files>
-npx supabase migration list
-npx supabase db push --dry-run
-node scripts/verify-rls.mjs
-```
-
-Required environment variables:
+Required browser variables:
 
 ```bash
 VITE_SUPABASE_URL=
 VITE_SUPABASE_PUBLISHABLE_KEY=
 VITE_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-APP_URL=
-VITE_ENABLE_DEMO_LOGIN=false
 ```
 
-Optional future email variables:
+Required server-only variables:
 
 ```bash
-RESEND_API_KEY=
-NOTIFICATION_FROM_EMAIL=
+SUPABASE_SERVICE_ROLE_KEY=
+APP_URL=
 ```
 
-## Production Notes
+Never place `SUPABASE_SERVICE_ROLE_KEY` in a `VITE_` variable or frontend file. Supabase Site URL and Redirect URLs must include every production/custom domain used for invitation and password recovery.
 
-Rotate any Supabase personal access token or service-role key that has been pasted into chat, logs, screenshots, or browser-visible code.
+## Release Verification
 
-Service-role keys belong only on the server. The frontend must use publishable or anon keys plus RLS.
+Run before each production release:
 
-Before launch, complete browser role-flow testing with real Super Admin, Admin, Sales Partner A, and Sales Partner B accounts.
+```bash
+npm run build
+npx tsc --noEmit
+npm run lint
+npx supabase migration list
+npx supabase db push --dry-run
+node scripts/verify-rls.mjs
+```
+
+Then complete `docs/BACKEND_RLS_AND_ROLE_FLOW_CHECKLIST.md` with real accounts. Rotate any personal access token or service-role key that has appeared in chat, logs, screenshots, or browser code.

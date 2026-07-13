@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Invitation fields are introduced by the pending migration. */
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 
@@ -7,7 +8,7 @@ type InvitePayload = {
   name?: string;
   email?: string;
   role?: "admin" | "partner";
-  tier?: "Associate" | "Specialist" | "Partner";
+  commissionRate?: number;
 };
 
 type RevokePayload = {
@@ -134,17 +135,19 @@ function validate(payload: InvitePayload) {
   const name = payload.name?.trim() || "";
   const email = normalizeEmail(payload.email || "");
   const role = payload.role;
-  const tier = payload.tier || "Associate";
+  const commissionRate = Number(payload.commissionRate);
 
   if (!name) return { error: "Full name is required." };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Valid email is required." };
   if (role !== "admin" && role !== "partner")
     return { error: "Role must be Admin or Sales Partner." };
-  if (role === "partner" && !["Associate", "Specialist", "Partner"].includes(tier)) {
-    return { error: "Partner tier is invalid." };
-  }
+  if (
+    role === "partner" &&
+    (!Number.isFinite(commissionRate) || commissionRate <= 0 || commissionRate > 100)
+  )
+    return { error: "Commission percentage must be greater than 0 and no more than 100." };
 
-  return { name, email, role, tier };
+  return { name, email, role, commissionRate: role === "partner" ? commissionRate : null };
 }
 
 export const Route = createFileRoute("/api/invitations")({
@@ -167,21 +170,24 @@ export const Route = createFileRoute("/api/invitations")({
           .maybeSingle();
 
         if (actorError) return json({ error: actorError.message }, 500);
-        if (actor?.role !== "super_admin")
-          return json({ error: "Only Super Admin can invite users." }, 403);
+        if (!actor || !["admin", "super_admin"].includes(actor.role))
+          return json({ error: "Only Admin users can invite users." }, 403);
 
         const parsed = validate((await request.json()) as InvitePayload);
         if ("error" in parsed) return json({ error: parsed.error }, 400);
+        if (actor.role === "admin" && parsed.role !== "partner")
+          return json({ error: "Admin can only invite Sales Partners." }, 403);
 
         let partnerId: string | null = null;
         if (parsed.role === "partner") {
-          const { data: partner, error: partnerError } = await service
+          const { data: partner, error: partnerError } = await (service as any)
             .from("partner_profiles")
             .insert({
               name: parsed.name,
               email: parsed.email,
-              tier: parsed.tier,
+              commission_rate: parsed.commissionRate,
               status: "pending",
+              agreements_required: true,
               assigned_contact: actor.full_name || "GoAccelovate Admin",
             })
             .select("id")
@@ -219,7 +225,11 @@ export const Route = createFileRoute("/api/invitations")({
           })
           .eq("id", userId);
 
-        if (profileError) return json({ error: profileError.message }, 500);
+        if (profileError) {
+          await service.auth.admin.deleteUser(userId);
+          if (partnerId) await service.from("partner_profiles").delete().eq("id", partnerId);
+          return json({ error: profileError.message }, 500);
+        }
 
         if (partnerId) {
           const { error: partnerLinkError } = await service
@@ -227,16 +237,21 @@ export const Route = createFileRoute("/api/invitations")({
             .update({ user_id: userId })
             .eq("id", partnerId);
 
-          if (partnerLinkError) return json({ error: partnerLinkError.message }, 500);
+          if (partnerLinkError) {
+            await service.auth.admin.deleteUser(userId);
+            await service.from("partner_profiles").delete().eq("id", partnerId);
+            return json({ error: partnerLinkError.message }, 500);
+          }
         }
 
         const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
-        const { data: invitation, error: invitationError } = await service
+        const { data: invitation, error: invitationError } = await (service as any)
           .from("invitations")
           .insert({
             email: parsed.email,
             role: parsed.role,
-            tier: parsed.role === "partner" ? parsed.tier : null,
+            tier: null,
+            commission_rate: parsed.commissionRate,
             partner_id: partnerId,
             invited_by: actor.id,
             token_hash: crypto.randomUUID(),
@@ -245,7 +260,11 @@ export const Route = createFileRoute("/api/invitations")({
           .select("id,created_at,expires_at")
           .single();
 
-        if (invitationError) return json({ error: invitationError.message }, 500);
+        if (invitationError) {
+          await service.auth.admin.deleteUser(userId);
+          if (partnerId) await service.from("partner_profiles").delete().eq("id", partnerId);
+          return json({ error: invitationError.message }, 500);
+        }
 
         return json({
           invitationId: invitation.id,
@@ -292,10 +311,19 @@ export const Route = createFileRoute("/api/invitations")({
         const { error: deleteError } = await service.from("invitations").delete().eq("id", id);
         if (deleteError) return json({ error: deleteError.message }, 500);
 
+        const { data: pendingProfile } = await service
+          .from("profiles")
+          .select("id,account_status")
+          .eq("email", invitation.email)
+          .maybeSingle();
+        if (pendingProfile?.account_status === "pending") {
+          await service.auth.admin.deleteUser(pendingProfile.id);
+        }
+
         if (invitation.partner_id) {
           await service
             .from("partner_profiles")
-            .update({ status: "deactivated" })
+            .delete()
             .eq("id", invitation.partner_id)
             .eq("status", "pending");
         }

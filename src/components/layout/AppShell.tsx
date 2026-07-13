@@ -9,7 +9,6 @@ import {
   ListChecks,
   KanbanSquare,
   List,
-  PhoneCall,
   DollarSign,
   Wallet,
   CreditCard,
@@ -19,14 +18,11 @@ import {
   ShieldCheck,
   UserCircle,
   ClipboardCheck,
-  PlusCircle,
-  FileText,
   Bell,
   Search,
   LogOut,
   Menu,
   X,
-  MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
   ArrowLeft,
@@ -41,7 +37,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge";
 
 type NavItem = { to: string; label: string; icon: ComponentType<{ className?: string }> };
 
@@ -52,11 +47,9 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { to: "/leads", label: "All Leads", icon: ListChecks },
   { to: "/pipeline", label: "Pipeline Kanban", icon: KanbanSquare },
   { to: "/pipeline-list", label: "Pipeline List", icon: List },
-  { to: "/discovery-calls", label: "Discovery Calls", icon: PhoneCall },
   { to: "/commissions", label: "Commissions", icon: DollarSign },
   { to: "/payouts", label: "Payout Requests", icon: Wallet },
   { to: "/client-payments", label: "Client Payments", icon: CreditCard },
-  { to: "/disputes", label: "Disputes", icon: MessageSquare },
   { to: "/announcements", label: "Announcements", icon: Megaphone },
   { to: "/reports", label: "Reports", icon: BarChart3 },
   { to: "/settings", label: "Settings", icon: Settings },
@@ -65,15 +58,14 @@ const SUPER_ADMIN_NAV: NavItem[] = [
 
 const ADMIN_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/users", label: "Sales Partners", icon: Users },
   { to: "/partners", label: "Partner Profiles", icon: Briefcase },
   { to: "/leads", label: "All Leads", icon: ListChecks },
   { to: "/pipeline", label: "Pipeline Kanban", icon: KanbanSquare },
   { to: "/pipeline-list", label: "Pipeline List", icon: List },
-  { to: "/discovery-calls", label: "Discovery Calls", icon: PhoneCall },
   { to: "/commissions", label: "Commissions", icon: DollarSign },
   { to: "/payouts", label: "Payout Requests", icon: Wallet },
   { to: "/client-payments", label: "Client Payments", icon: CreditCard },
-  { to: "/disputes", label: "Disputes", icon: MessageSquare },
   { to: "/announcements", label: "Announcements", icon: Megaphone },
   { to: "/reports", label: "Reports", icon: BarChart3 },
 ];
@@ -82,12 +74,8 @@ const PARTNER_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/profile", label: "My Profile", icon: UserCircle },
   { to: "/onboarding", label: "Onboarding", icon: ClipboardCheck },
-  { to: "/submit-lead", label: "Submit Lead", icon: PlusCircle },
   { to: "/leads", label: "My Leads", icon: ListChecks },
   { to: "/commissions", label: "My Commissions", icon: DollarSign },
-  { to: "/request-payout", label: "Request Payout", icon: Wallet },
-  { to: "/payouts", label: "Payout History", icon: FileText },
-  { to: "/disputes", label: "Disputes", icon: MessageSquare },
   { to: "/announcements", label: "Announcements", icon: Megaphone },
   { to: "/reports", label: "My Reports", icon: BarChart3 },
 ];
@@ -114,7 +102,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const { notifications, markNotificationRead, markAllNotificationsRead } = useStore();
   if (!user) return null;
-  const nav = getNav(user.role);
+  const nav =
+    user.role === "partner" && user.agreementsComplete === false
+      ? PARTNER_NAV.filter((item) => ["/profile", "/onboarding"].includes(item.to))
+      : getNav(user.role);
   const unread = notifications.filter((n) => !n.read).length;
   const selectedNotification =
     notifications.find((notification) => notification.id === selectedNotificationId) || null;
@@ -140,9 +131,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold leading-tight">GoAccelovate</div>
+              <div className="truncate text-sm font-semibold leading-tight">Go Accelerate</div>
               <div className="truncate text-[11px] uppercase tracking-wider text-sidebar-foreground/60">
-                GTPP Portal
+                Global Partner Program
               </div>
             </div>
           )}
@@ -215,7 +206,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <PanelLeftOpen className="h-4 w-4" />
             </Button>
           ) : (
-            "v1.0 - Demo Prototype"
+            "Global Partner Program"
           )}
         </div>
       </aside>
@@ -463,15 +454,11 @@ export function StatusBadge({ status }: { status: string }) {
     "On Hold": "bg-warning/15 text-warning-foreground border-warning/30",
     "Closed Won": "bg-success/10 text-success border-success/20",
     "Closed Lost": "bg-destructive/10 text-destructive border-destructive/20",
-    "Duplicate Under Review": "bg-warning/15 text-warning-foreground border-warning/30",
     "Duplicate Rejected": "bg-muted text-muted-foreground border-border",
-    Disqualified: "bg-muted text-muted-foreground border-border",
-    Reopened: "bg-info/10 text-info border-info/20",
     Unpaid: "bg-muted text-muted-foreground border-border",
     "Payout Requested": "bg-info/10 text-info border-info/20",
     Approved: "bg-info/15 text-info border-info/20",
     Paid: "bg-success/10 text-success border-success/20",
-    Disputed: "bg-destructive/10 text-destructive border-destructive/20",
     Waived: "bg-muted text-muted-foreground border-border",
     Pending: "bg-warning/15 text-warning-foreground border-warning/30",
     Rejected: "bg-destructive/10 text-destructive border-destructive/20",
@@ -484,13 +471,4 @@ export function StatusBadge({ status }: { status: string }) {
       {status}
     </span>
   );
-}
-
-export function TierBadge({ tier }: { tier: string }) {
-  const map: Record<string, string> = {
-    Associate: "bg-secondary text-secondary-foreground",
-    Specialist: "bg-info/10 text-info",
-    Partner: "bg-gradient-brand text-brand-foreground",
-  };
-  return <Badge className={`${map[tier]} border-0`}>{tier}</Badge>;
 }

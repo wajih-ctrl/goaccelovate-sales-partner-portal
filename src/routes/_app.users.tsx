@@ -1,5 +1,5 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
-import { PageHeader, PageContainer, StatusBadge, TierBadge } from "@/components/layout/AppShell";
+import { PageHeader, PageContainer, StatusBadge } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
@@ -20,12 +20,8 @@ import { revokeRealInvitation, sendRealInvitation } from "@/lib/real-invitations
 export const Route = createFileRoute("/_app/users")({ component: UsersPage });
 
 type InviteRole = "partner" | "admin";
-type InviteTier = "Associate" | "Specialist" | "Partner";
-
-const TIERS: InviteTier[] = ["Associate", "Specialist", "Partner"];
-
 function UsersPage() {
-  const { user, authMode } = useAuth();
+  const { user } = useAuth();
   const {
     partners,
     staffUsers,
@@ -37,7 +33,6 @@ function UsersPage() {
     reactivateUser,
     deleteUser,
     changeUserRole,
-    changePartnerTier,
     changePartnerRate,
   } = useStore();
 
@@ -46,22 +41,28 @@ function UsersPage() {
     name: "",
     email: "",
     role: "partner" as InviteRole,
-    tier: "Associate" as InviteTier,
+    commissionRate: "10",
   });
   const [inviteLoading, setInviteLoading] = useState(false);
   const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
-  const [tierTarget, setTierTarget] = useState<{ id: string; tier: string } | null>(null);
   const [rateTarget, setRateTarget] = useState<{ id: string; rate: string } | null>(null);
   const [roleTarget, setRoleTarget] = useState<{ id: string; role: InviteRole } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
-  if (user?.role !== "super_admin") return <Navigate to="/access-denied" />;
+  if (!user || !["admin", "super_admin"].includes(user.role))
+    return <Navigate to="/access-denied" />;
+  const isSuperAdmin = user.role === "super_admin";
+  const visibleInvites = isSuperAdmin ? invites : invites.filter((item) => item.role === "partner");
 
   return (
     <>
       <PageHeader
         title="User Management"
-        description="Invite, suspend, change roles, and manage all portal accounts."
+        description={
+          isSuperAdmin
+            ? "Invite users and manage portal accounts."
+            : "Invite and view Sales Partners."
+        }
         actions={
           <Button onClick={() => setShowInvite(true)}>
             <UserPlus className="mr-2 h-4 w-4" />
@@ -70,55 +71,49 @@ function UsersPage() {
         }
       />
       <PageContainer>
-        {invites.length > 0 && (
+        {visibleInvites.length > 0 && (
           <Card className="overflow-hidden">
             <div className="border-b bg-accent/40 px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Pending invitations ({invites.length})
+              Pending invitations ({visibleInvites.length})
             </div>
             <div className="responsive-table-scroll">
               <table className="min-w-[760px] w-full text-sm whitespace-nowrap">
                 <tbody>
-                  {invites.map((i) => (
+                  {visibleInvites.map((i) => (
                     <tr key={i.id} className="border-t">
                       <td className="px-4 py-3 font-medium">{i.name}</td>
                       <td className="px-4 py-3 text-muted-foreground">{i.email}</td>
                       <td className="px-4 py-3 capitalize">
                         {i.role}
-                        {i.tier ? ` · ${i.tier}` : ""}
+                        {i.commissionRate ? ` · ${i.commissionRate}% commission` : ""}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         Sent {new Date(i.invitedDate).toLocaleDateString()} · expires in{" "}
                         {settings.invitationExpiry}h
                       </td>
                       <td className="px-4 py-3 text-right space-x-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => toast.success(`Invitation resent to ${i.email}`)}
-                        >
-                          Resend
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={revokingInviteId === i.id}
-                          onClick={async () => {
-                            setRevokingInviteId(i.id);
-                            const result =
-                              authMode === "supabase" ? await revokeRealInvitation(i.id) : {};
-                            setRevokingInviteId(null);
+                        {isSuperAdmin && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={revokingInviteId === i.id}
+                            onClick={async () => {
+                              setRevokingInviteId(i.id);
+                              const result = await revokeRealInvitation(i.id);
+                              setRevokingInviteId(null);
 
-                            if (result.error) {
-                              toast.error(result.error);
-                              return;
-                            }
+                              if (result.error) {
+                                toast.error(result.error);
+                                return;
+                              }
 
-                            revokeInvitation(i.id, user.name);
-                            toast.warning("Invitation revoked");
-                          }}
-                        >
-                          {revokingInviteId === i.id ? "Revoking..." : "Revoke"}
-                        </Button>
+                              revokeInvitation(i.id, user.name);
+                              toast.warning("Invitation revoked");
+                            }}
+                          >
+                            {revokingInviteId === i.id ? "Revoking..." : "Revoke"}
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -139,139 +134,136 @@ function UsersPage() {
                   <th className="px-4 py-3 text-left">Name</th>
                   <th className="px-4 py-3 text-left">Email</th>
                   <th className="px-4 py-3 text-left">Role</th>
-                  <th className="px-4 py-3 text-left">Tier</th>
                   <th className="px-4 py-3 text-right">Rate</th>
                   <th className="px-4 py-3 text-left">Status</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody>
-                {staffUsers.map((u) => (
-                  <tr key={u.id} className="border-t hover:bg-accent/20">
-                    <td className="px-4 py-3 font-medium">{u.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
-                    <td className="px-4 py-3 capitalize">{u.role.replace("_", " ")}</td>
-                    <td className="px-4 py-3 text-muted-foreground">—</td>
-                    <td className="px-4 py-3 text-right text-muted-foreground">—</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge
-                        status={
-                          u.accountStatus === "suspended"
-                            ? "Suspended"
-                            : u.accountStatus === "pending"
-                              ? "Pending"
-                              : "Active"
-                        }
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setRoleTarget({
-                                id: u.id,
-                                role: u.role === "admin" ? "partner" : "admin",
-                              })
+                {isSuperAdmin &&
+                  staffUsers
+                    .filter((u) => u.role !== "partner")
+                    .map((u) => (
+                      <tr key={u.id} className="border-t hover:bg-accent/20">
+                        <td className="px-4 py-3 font-medium">{u.name}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
+                        <td className="px-4 py-3 capitalize">{u.role.replace("_", " ")}</td>
+                        <td className="px-4 py-3 text-right text-muted-foreground">—</td>
+                        <td className="px-4 py-3">
+                          <StatusBadge
+                            status={
+                              u.accountStatus === "suspended"
+                                ? "Suspended"
+                                : u.accountStatus === "pending"
+                                  ? "Pending"
+                                  : "Active"
                             }
-                          >
-                            Change role
-                          </DropdownMenuItem>
-                          {u.accountStatus === "suspended" ? (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                reactivateUser(u.id, user.name);
-                                toast.success(`${u.name} reactivated`);
-                              }}
-                            >
-                              Reinstate
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                suspendUser(u.id, user.name);
-                                toast.warning(`${u.name} suspended`);
-                              }}
-                            >
-                              Suspend
-                            </DropdownMenuItem>
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {isSuperAdmin && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    setRoleTarget({
+                                      id: u.id,
+                                      role: u.role === "admin" ? "partner" : "admin",
+                                    })
+                                  }
+                                >
+                                  Change role
+                                </DropdownMenuItem>
+                                {u.accountStatus === "suspended" ? (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      reactivateUser(u.id, user.name);
+                                      toast.success(`${u.name} reactivated`);
+                                    }}
+                                  >
+                                    Reinstate
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      suspendUser(u.id, user.name);
+                                      toast.warning(`${u.name} suspended`);
+                                    }}
+                                  >
+                                    Suspend
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={() => setDeleteTarget(u.id)}
+                                >
+                                  Deactivate account
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           )}
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => setDeleteTarget(u.id)}
-                          >
-                            Deactivate account
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                ))}
+                        </td>
+                      </tr>
+                    ))}
                 {partners.map((p) => (
                   <tr key={p.id} className="border-t hover:bg-accent/20">
                     <td className="px-4 py-3 font-medium">{p.name}</td>
                     <td className="px-4 py-3 text-muted-foreground">{p.email}</td>
                     <td className="px-4 py-3">Sales Partner</td>
-                    <td className="px-4 py-3">
-                      <TierBadge tier={p.tier} />
-                    </td>
                     <td className="px-4 py-3 text-right">{p.commissionRate}%</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={p.status} />
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => setTierTarget({ id: p.id, tier: p.tier })}
-                          >
-                            Change tier
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              setRateTarget({ id: p.id, rate: String(p.commissionRate) })
-                            }
-                          >
-                            Set commission rate
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          {p.status === "Active" ? (
+                      {isSuperAdmin && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
                             <DropdownMenuItem
-                              onClick={() => {
-                                suspendUser(p.id, user.name);
-                                toast.warning(`${p.name} suspended`);
-                              }}
+                              onClick={() =>
+                                setRateTarget({ id: p.id, rate: String(p.commissionRate) })
+                              }
                             >
-                              Suspend
+                              Set commission rate
                             </DropdownMenuItem>
-                          ) : (
+                            <DropdownMenuSeparator />
+                            {p.status === "Active" ? (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  suspendUser(p.id, user.name);
+                                  toast.warning(`${p.name} suspended`);
+                                }}
+                              >
+                                Suspend
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  reactivateUser(p.id, user.name);
+                                  toast.success(`${p.name} reactivated`);
+                                }}
+                              >
+                                Reactivate
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
-                              onClick={() => {
-                                reactivateUser(p.id, user.name);
-                                toast.success(`${p.name} reactivated`);
-                              }}
+                              className="text-destructive"
+                              onClick={() => setDeleteTarget(p.id)}
                             >
-                              Reactivate
+                              Delete account
                             </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => setDeleteTarget(p.id)}
-                          >
-                            Delete account
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -288,7 +280,9 @@ function UsersPage() {
         canSubmit={
           !!invite.name.trim() &&
           !!invite.email.trim() &&
-          /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invite.email)
+          /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invite.email) &&
+          (invite.role !== "partner" ||
+            (Number(invite.commissionRate) > 0 && Number(invite.commissionRate) <= 100))
         }
         submitLabel={inviteLoading ? "Sending..." : "Send invitation"}
         onSubmit={async () => {
@@ -297,9 +291,9 @@ function UsersPage() {
             name: invite.name.trim(),
             email: invite.email.trim(),
             role: invite.role,
-            tier: invite.role === "partner" ? invite.tier : undefined,
+            commissionRate: invite.role === "partner" ? Number(invite.commissionRate) : undefined,
           };
-          const result = authMode === "supabase" ? await sendRealInvitation(payload) : {};
+          const result = await sendRealInvitation(payload);
           setInviteLoading(false);
 
           if (result.error) {
@@ -317,7 +311,7 @@ function UsersPage() {
           );
           toast.success(`Invitation sent to ${invite.email}`);
           setShowInvite(false);
-          setInvite({ name: "", email: "", role: "partner", tier: "Associate" });
+          setInvite({ name: "", email: "", role: "partner", commissionRate: "10" });
         }}
       >
         <label className="text-xs">
@@ -345,21 +339,21 @@ function UsersPage() {
             onChange={(e) => setInvite({ ...invite, role: e.target.value as InviteRole })}
           >
             <option value="partner">Sales Partner</option>
-            <option value="admin">Admin</option>
+            {isSuperAdmin && <option value="admin">Admin</option>}
           </select>
         </label>
         {invite.role === "partner" && (
           <label className="text-xs">
-            Tier
-            <select
+            Commission percentage
+            <input
+              type="number"
+              min="0.01"
+              max="100"
+              step="0.01"
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={invite.tier}
-              onChange={(e) => setInvite({ ...invite, tier: e.target.value as InviteTier })}
-            >
-              {TIERS.map((t) => (
-                <option key={t}>{t}</option>
-              ))}
-            </select>
+              value={invite.commissionRate}
+              onChange={(e) => setInvite({ ...invite, commissionRate: e.target.value })}
+            />
           </label>
         )}
       </FormDialog>
@@ -388,31 +382,6 @@ function UsersPage() {
               <option value="partner">Sales Partner</option>
             </select>
           </label>
-        )}
-      </FormDialog>
-
-      <FormDialog
-        open={!!tierTarget}
-        onOpenChange={(b) => !b && setTierTarget(null)}
-        title="Change partner tier"
-        submitLabel="Save"
-        canSubmit={!!tierTarget}
-        onSubmit={() => {
-          changePartnerTier(tierTarget!.id, tierTarget!.tier, user.name);
-          toast.success(`Tier updated to ${tierTarget!.tier}`);
-          setTierTarget(null);
-        }}
-      >
-        {tierTarget && (
-          <select
-            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-            value={tierTarget.tier}
-            onChange={(e) => setTierTarget({ ...tierTarget, tier: e.target.value })}
-          >
-            {TIERS.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
         )}
       </FormDialog>
 

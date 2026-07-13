@@ -5,7 +5,7 @@ import { PageContainer, PageHeader } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { downloadCsv } from "@/lib/exports";
-import { fmtCurrency } from "@/lib/mock-data";
+import { fmtCurrency } from "@/lib/domain";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
 
@@ -18,7 +18,7 @@ function Reports() {
   const partnerId = user?.partnerId;
 
   const partnerOverviewRows = [
-    ["Name", "Tier", "Status", "Country", "Rate", "Active Leads", "Won", "Earned"],
+    ["Name", "Status", "Country", "Rate", "In Progress", "Won", "Earned"],
     ...partners.map((partner) => {
       const partnerLeads = leads.filter((lead) => lead.partnerId === partner.id);
       const earned = commissions
@@ -26,11 +26,12 @@ function Reports() {
         .reduce((sum, commission) => sum + commission.amount, 0);
       return [
         partner.name,
-        partner.tier,
         partner.status,
         partner.country,
         `${partner.commissionRate}%`,
-        partnerLeads.filter((lead) => lead.status === "Active").length,
+        partnerLeads.filter(
+          (lead) => !["Closed Won", "Closed Lost", "Duplicate Rejected"].includes(lead.status),
+        ).length,
         partnerLeads.filter((lead) => lead.status === "Closed Won").length,
         earned,
       ];
@@ -51,7 +52,7 @@ function Reports() {
   ];
 
   const liabilityRows = [
-    ["Partner", "Unpaid", "Approved", "Requested", "Disputed", "Total Owed"],
+    ["Partner", "Payable", "Paid", "Pending Total"],
     ...partners.map((partner) => {
       const partnerCommissions = commissions.filter(
         (commission) => commission.partnerId === partner.id,
@@ -62,11 +63,13 @@ function Reports() {
           .reduce((total, commission) => total + commission.amount, 0);
       return [
         partner.name,
-        sum("Unpaid"),
-        sum("Approved"),
-        sum("Payout Requested"),
-        sum("Disputed"),
-        sum("Unpaid") + sum("Approved") + sum("Payout Requested") + sum("Disputed"),
+        partnerCommissions.reduce(
+          (total, commission) =>
+            total + Math.max(0, (commission.eligibleAmount || 0) - (commission.paidAmount || 0)),
+          0,
+        ),
+        partnerCommissions.reduce((total, commission) => total + (commission.paidAmount || 0), 0),
+        sum("Unpaid") + sum("Approved") + sum("Payout Requested"),
       ];
     }),
   ];
@@ -149,7 +152,7 @@ function Reports() {
   const adminReports = [
     {
       name: "All Partners Overview",
-      desc: "Roster, tiers, status, performance summary.",
+      desc: "Roster, status, commission rate, and performance summary.",
       rows: partnerOverviewRows,
       file: "partners-overview",
     },
@@ -215,14 +218,137 @@ function Reports() {
         leads: leads.length,
         earned: commissions.reduce((sum, commission) => sum + commission.amount, 0),
       };
+  const visibleLeads = isPartner ? leads.filter((lead) => lead.partnerId === partnerId) : leads;
+  const won = visibleLeads.filter((lead) => lead.stage === "Closed Won").length;
+  const lost = visibleLeads.filter((lead) => lead.stage === "Closed Lost").length;
+  const inProgress = visibleLeads.filter(
+    (lead) =>
+      !["Closed Won", "Closed Lost"].includes(lead.stage) && lead.status !== "Duplicate Rejected",
+  ).length;
+  const pipelineValue = visibleLeads
+    .filter((lead) => !["Closed Won", "Closed Lost"].includes(lead.stage))
+    .reduce((sum, lead) => sum + lead.estimatedValue, 0);
+  const visibleCommissions = isPartner
+    ? commissions.filter((commission) => commission.partnerId === partnerId)
+    : commissions;
+  const commissionPaid = visibleCommissions.reduce(
+    (sum, commission) => sum + (commission.paidAmount || 0),
+    0,
+  );
+  const commissionPending = visibleCommissions.reduce(
+    (sum, commission) =>
+      sum + Math.max(0, (commission.eligibleAmount || 0) - (commission.paidAmount || 0)),
+    0,
+  );
+  const clientReceived = isPartner
+    ? 0
+    : clientPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const outstanding = isPartner
+    ? 0
+    : leads.reduce((sum, lead) => {
+        const received = clientPayments
+          .filter((payment) => payment.leadId === lead.id)
+          .reduce((total, payment) => total + payment.amount, 0);
+        return sum + Math.max(0, (lead.confirmedValue || lead.estimatedValue) - received);
+      }, 0);
+  const averageDays = (values: number[]) =>
+    values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const averageServiceDays = averageDays(
+    visibleLeads
+      .filter((lead) => lead.stage === "Closed Won")
+      .map((lead) =>
+        Math.max(
+          0,
+          (new Date(lead.lastActivity).getTime() - new Date(lead.createdAt).getTime()) / dayMs,
+        ),
+      ),
+  );
+  const averageStageDays = averageDays(
+    visibleLeads
+      .filter((lead) => !["Closed Won", "Closed Lost"].includes(lead.stage))
+      .map((lead) => Math.max(0, (Date.now() - new Date(lead.lastActivity).getTime()) / dayMs)),
+  );
+  const topPartner = partners
+    .map((partner) => ({
+      name: partner.name,
+      won: leads.filter((lead) => lead.partnerId === partner.id && lead.stage === "Closed Won")
+        .length,
+    }))
+    .sort((a, b) => b.won - a.won || a.name.localeCompare(b.name))[0];
 
   return (
     <>
       <PageHeader
         title={isPartner ? "My Reports" : "Reports"}
-        description="Generate and export performance reports."
+        description={
+          isPartner
+            ? "Your live performance and commission KPIs."
+            : "Operational KPIs and role-safe exports."
+        }
       />
       <PageContainer>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="p-4">
+            <div className="text-xs uppercase text-muted-foreground">Won leads</div>
+            <div className="mt-1 text-2xl font-semibold">{won}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-xs uppercase text-muted-foreground">Lost leads</div>
+            <div className="mt-1 text-2xl font-semibold">{lost}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-xs uppercase text-muted-foreground">In progress</div>
+            <div className="mt-1 text-2xl font-semibold">{inProgress}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-xs uppercase text-muted-foreground">Conversion rate</div>
+            <div className="mt-1 text-2xl font-semibold">
+              {won + lost ? Math.round((won / (won + lost)) * 100) : 0}%
+            </div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-xs uppercase text-muted-foreground">Pipeline value</div>
+            <div className="mt-1 text-2xl font-semibold">{fmtCurrency(pipelineValue)}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-xs uppercase text-muted-foreground">Commission paid</div>
+            <div className="mt-1 text-2xl font-semibold">{fmtCurrency(commissionPaid)}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-xs uppercase text-muted-foreground">Pending commission</div>
+            <div className="mt-1 text-2xl font-semibold">{fmtCurrency(commissionPending)}</div>
+          </Card>
+          {!isPartner && (
+            <Card className="p-4">
+              <div className="text-xs uppercase text-muted-foreground">
+                Client payments received
+              </div>
+              <div className="mt-1 text-2xl font-semibold">{fmtCurrency(clientReceived)}</div>
+            </Card>
+          )}
+          {!isPartner && (
+            <Card className="p-4">
+              <div className="text-xs uppercase text-muted-foreground">Outstanding balances</div>
+              <div className="mt-1 text-2xl font-semibold">{fmtCurrency(outstanding)}</div>
+            </Card>
+          )}
+          <Card className="p-4">
+            <div className="text-xs uppercase text-muted-foreground">Average service duration</div>
+            <div className="mt-1 text-2xl font-semibold">{averageServiceDays} days</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-xs uppercase text-muted-foreground">Average stage age</div>
+            <div className="mt-1 text-2xl font-semibold">{averageStageDays} days</div>
+          </Card>
+          {!isPartner && (
+            <Card className="p-4">
+              <div className="text-xs uppercase text-muted-foreground">Top partner by wins</div>
+              <div className="mt-1 text-lg font-semibold">{topPartner?.name || "-"}</div>
+              <div className="text-xs text-muted-foreground">{topPartner?.won || 0} won leads</div>
+            </Card>
+          )}
+        </div>
         <div className="grid gap-4 md:grid-cols-3">
           <Card className="p-5">
             <div className="text-xs uppercase text-muted-foreground">Total leads</div>
@@ -252,15 +378,17 @@ function Reports() {
                 </div>
                 <FileText className="h-5 w-5 text-muted-foreground" />
               </div>
-              <div className="mt-4 flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => exportReport(report)}>
-                  <FileSpreadsheet className="mr-2 h-4 w-4" />
-                  CSV
-                </Button>
-                <Button size="sm" variant="outline" disabled>
-                  PDF coming soon
-                </Button>
-              </div>
+              {!isPartner && (
+                <div className="mt-4 flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => exportReport(report)}>
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    CSV
+                  </Button>
+                  <Button size="sm" variant="outline" disabled>
+                    PDF coming soon
+                  </Button>
+                </div>
+              )}
             </Card>
           ))}
         </div>

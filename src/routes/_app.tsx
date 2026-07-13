@@ -12,6 +12,13 @@ function AppLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   if (!ready) return null;
   if (!user) return <Navigate to="/login" replace />;
+  if (
+    user.role === "partner" &&
+    user.agreementsComplete === false &&
+    pathname !== "/onboarding" &&
+    pathname !== "/profile"
+  )
+    return <Navigate to="/onboarding" replace />;
   if (!isPathAllowedForRole(user.role, pathname)) return <Navigate to="/access-denied" replace />;
   return (
     <AppShell>

@@ -130,8 +130,8 @@ function AuditLog() {
               Append-only · {list.length} entries
             </span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="responsive-table-scroll">
+            <table className="min-w-[980px] w-full whitespace-nowrap text-sm">
               <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 text-left">When</th>

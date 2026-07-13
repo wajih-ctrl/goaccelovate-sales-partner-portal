@@ -6,19 +6,8 @@ import { buildStoragePath, STORAGE_BUCKETS, validateUploadFile } from "./file-up
 import type { Json } from "./database.types";
 import { isSupabaseConfigured, supabase } from "./supabase";
 import { isAnnouncementTargeted } from "./announcements";
+import { INDUSTRIES, LEAD_STAGES } from "./program";
 import {
-  DEMO_USERS,
-  PARTNERS as INITIAL_PARTNERS,
-  LEADS as INITIAL_LEADS,
-  COMMISSIONS as INITIAL_COMMISSIONS,
-  PAYOUTS as INITIAL_PAYOUTS,
-  CLIENT_PAYMENTS as INITIAL_CLIENT_PAYMENTS,
-  DISCOVERY_CALLS as INITIAL_CALLS,
-  ACTIVITY as INITIAL_ACTIVITY,
-  ANNOUNCEMENTS as INITIAL_ANN,
-  NOTIFICATIONS as INITIAL_NOTIF,
-  AUDIT_LOG as INITIAL_AUDIT,
-  PARTNER_ONBOARDING as INITIAL_ONBOARDING,
   ONBOARDING_STEPS,
   type Partner,
   type Lead,
@@ -35,18 +24,7 @@ import {
   type AuditEntry,
   type User,
   type Tier,
-} from "./mock-data";
-
-export interface Dispute {
-  id: string;
-  commissionId: string;
-  partnerId: string;
-  openedDate: string;
-  reason: string;
-  status: "Open" | "Under Review" | "Resolved" | "Rejected";
-  resolution?: string;
-  thread: { id: string; user: string; text: string; date: string }[];
-}
+} from "./domain";
 
 export interface Settings {
   defaultRate: number;
@@ -67,7 +45,7 @@ export interface InvitedUser {
   name: string;
   email: string;
   role: "admin" | "partner";
-  tier?: string;
+  commissionRate?: number;
   invitedDate: string;
   status: "Invited";
 }
@@ -104,7 +82,6 @@ interface AppState {
   announcements: Announcement[];
   notifications: Notification[];
   audit: AuditEntry[];
-  disputes: Dispute[];
   onboarding: Record<string, Record<string, boolean>>;
   invites: InvitedUser[];
   staffUsers: User[];
@@ -131,8 +108,8 @@ interface AppActions {
     actor: string,
     isPrivate?: boolean,
   ) => Promise<boolean>;
-  approveDuplicate: (leadId: string, actor: string, reason: string) => void;
-  rejectDuplicate: (leadId: string, actor: string, reason: string) => void;
+  deleteLead: (leadId: string, actor: string) => Promise<boolean>;
+  updateEstimatedValue: (leadId: string, value: number, actor: string) => void;
   // Discovery calls
   addCall: (
     c: Omit<DiscoveryCall, "id"> & { attachmentFile?: File },
@@ -159,9 +136,6 @@ interface AppActions {
   ) => void;
   setCommissionState: (commissionId: string, state: CommissionState, actor: string) => void;
   waiveCommission: (commissionId: string, actor: string, reason: string) => void;
-  openDispute: (commissionId: string, partnerId: string, reason: string, actor: string) => void;
-  replyDispute: (disputeId: string, text: string, actor: string) => void;
-  resolveDispute: (disputeId: string, resolution: string, accept: boolean, actor: string) => void;
   // Payouts
   requestPayout: (
     partnerId: string,
@@ -194,7 +168,7 @@ interface AppActions {
       name: string;
       email: string;
       role: "admin" | "partner";
-      tier?: string;
+      commissionRate?: number;
       invitedDate?: string;
     },
     actor: string,
@@ -237,25 +211,8 @@ const DEFAULT_SETTINGS: Settings = {
   invitationExpiry: 72,
   currency: "USD",
   currencies: ["USD", "EUR", "GBP", "JPY", "INR", "AED", "BRL"],
-  industries: [
-    "SaaS",
-    "Manufacturing",
-    "FinTech",
-    "HealthTech",
-    "Logistics",
-    "Retail",
-    "Energy",
-    "Education",
-  ],
-  pipelineLabels: [
-    "New Lead",
-    "In Conversation",
-    "Discovery Call",
-    "Proposal Sent",
-    "Negotiation",
-    "Closed Won",
-    "Closed Lost",
-  ],
+  industries: [...INDUSTRIES],
+  pipelineLabels: [...LEAD_STAGES],
   onboardingSteps: ONBOARDING_STEPS.map((s) => s.label),
   tierLabels: ["Associate", "Specialist", "Partner"],
 };
@@ -286,6 +243,11 @@ const stringifyValue = (value: unknown) => {
 const publicId = (prefix: string) => `${prefix}-${Math.floor(Math.random() * 90000 + 10000)}`;
 
 function announcementTarget(target: string, partners: Partner[]) {
+  if (target === "All portal users") return { target_type: "all_users", target_rules: {} };
+  if (target === "Admin users")
+    return { target_type: "staff_roles", target_rules: { roles: ["admin", "super_admin"] } };
+  if (target === "Super Admin users")
+    return { target_type: "staff_roles", target_rules: { roles: ["super_admin"] } };
   if (target === "All partners") return { target_type: "all_partners", target_rules: {} };
   if (target === "Partner tier")
     return { target_type: "tier", target_rules: { tiers: ["Partner"] } };
@@ -353,6 +315,7 @@ function mapLead(row: any): Lead {
     contactTitle: row.contact_title,
     contactEmail: row.contact_email,
     contactPhone: row.contact_phone || "",
+    clientLinkedin: row.client_linkedin || undefined,
     country: row.country,
     industry: row.industry,
     estimatedValue: Number(row.estimated_value || 0),
@@ -365,6 +328,7 @@ function mapLead(row: any): Lead {
     lastActivity: row.last_activity_at,
     confirmedValue: row.confirmed_value == null ? undefined : Number(row.confirmed_value),
     duplicateReason: row.duplicate_reason || undefined,
+    previousStage: row.previous_stage || undefined,
   };
 }
 
@@ -380,6 +344,8 @@ function mapCommission(row: any): Commission {
     kind: row.kind,
     label: row.label || undefined,
     notes: row.override_reason || row.waived_reason || undefined,
+    eligibleAmount: Number(row.eligible_amount || 0),
+    paidAmount: Number(row.paid_amount || 0),
   };
 }
 
@@ -410,6 +376,7 @@ function mapClientPayment(row: any): ClientPayment {
     reference: row.payment_reference,
     method: row.payment_method,
     notes: row.notes || undefined,
+    paymentType: row.payment_type || undefined,
   };
 }
 
@@ -477,26 +444,6 @@ function mapAudit(row: any): AuditEntry {
     details: row.record_name || row.record_id || "",
     oldValue: stringifyValue(row.old_value),
     newValue: stringifyValue(row.new_value),
-  };
-}
-
-function mapDispute(row: any, messages: any[]): Dispute {
-  return {
-    id: row.id,
-    commissionId: row.commission_id,
-    partnerId: row.partner_id,
-    openedDate: row.created_at,
-    reason: row.reason,
-    status: row.status,
-    resolution: row.resolution || undefined,
-    thread: messages
-      .filter((message) => message.dispute_id === row.id)
-      .map((message) => ({
-        id: message.id,
-        user: message.actor_name,
-        text: message.text,
-        date: message.created_at,
-      })),
   };
 }
 
@@ -585,71 +532,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
-  const [disputes, setDisputes] = useState<Dispute[]>([]);
-  /*
-  const [legacyDemoDisputes] = useState<Dispute[]>([
-    {
-      id: "D-7001",
-      commissionId: "C-2003",
-      partnerId: "p9",
-      openedDate: "2025-06-12",
-      reason: "Amount calculated against estimated value, not confirmed value.",
-      status: "Under Review",
-      thread: [
-        {
-          id: "t1",
-          user: "Fatima Al-Mansouri",
-          text: "Please review the commission base — should reflect confirmed value of $640k.",
-          date: "2025-06-12T09:00",
-        },
-        {
-          id: "t2",
-          user: "Marcus Reid",
-          text: "Investigating with finance. Will revert by end of week.",
-          date: "2025-06-13T11:00",
-        },
-      ],
-    },
-  ]);
-  */
   const [onboarding, setOnboarding] = useState<Record<string, Record<string, boolean>>>({});
   const [invites, setInvites] = useState<InvitedUser[]>([]);
   const [staffUsers, setStaffUsers] = useState<User[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [attachments, setAttachments] = useState<
-    Record<string, { id: string; name: string; date: string }[]>
-  >({});
+  const [attachments, setAttachments] = useState<Record<string, StoredAttachment[]>>({});
   const [partnerDocuments, setPartnerDocuments] = useState<Record<string, PartnerDocument[]>>({});
-  /*
-  const [legacyDemoPartnerDocuments] = useState<Record<string, PartnerDocument[]>>({
-    p1: [
-      {
-        id: "PD-1",
-        partnerId: "p1",
-        name: "Partner_Agreement_Signed.pdf",
-        type: "Agreement",
-        uploadedDate: "2024-03-12",
-        uploadedBy: "Marcus Reid",
-      },
-      {
-        id: "PD-2",
-        partnerId: "p1",
-        name: "NDA_Executed.pdf",
-        type: "NDA",
-        uploadedDate: "2024-03-12",
-        uploadedBy: "Marcus Reid",
-      },
-      {
-        id: "PD-3",
-        partnerId: "p1",
-        name: "Commission_Schedule.pdf",
-        type: "Commission Schedule",
-        uploadedDate: "2024-03-14",
-        uploadedBy: "Alexandra Pierce",
-      },
-    ],
-  });
-  */
 
   const clearBusinessState = useCallback(() => {
     setPartners([]);
@@ -662,88 +550,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setAnnouncements([]);
     setNotifications([]);
     setAudit([]);
-    setDisputes([]);
     setOnboarding(EMPTY_ONBOARDING);
     setInvites([]);
     setStaffUsers([]);
     setSettings(DEFAULT_SETTINGS);
     setAttachments(EMPTY_ATTACHMENTS);
     setPartnerDocuments(EMPTY_PARTNER_DOCS);
-  }, []);
-
-  const loadDemoState = useCallback(() => {
-    setPartners(INITIAL_PARTNERS);
-    setLeads(INITIAL_LEADS);
-    setCommissions(INITIAL_COMMISSIONS);
-    setPayouts(INITIAL_PAYOUTS);
-    setClientPayments(INITIAL_CLIENT_PAYMENTS);
-    setCalls(INITIAL_CALLS);
-    setActivity(INITIAL_ACTIVITY);
-    setAnnouncements(INITIAL_ANN);
-    setNotifications(INITIAL_NOTIF);
-    setAudit(INITIAL_AUDIT);
-    setDisputes([
-      {
-        id: "D-7001",
-        commissionId: "C-2003",
-        partnerId: "p9",
-        openedDate: "2025-06-12",
-        reason: "Amount calculated against estimated value, not confirmed value.",
-        status: "Under Review",
-        thread: [
-          {
-            id: "t1",
-            user: "Fatima Al-Mansouri",
-            text: "Please review the commission base - should reflect confirmed value of $640k.",
-            date: "2025-06-12T09:00",
-          },
-          {
-            id: "t2",
-            user: "Marcus Reid",
-            text: "Investigating with finance. Will revert by end of week.",
-            date: "2025-06-13T11:00",
-          },
-        ],
-      },
-    ]);
-    setOnboarding(INITIAL_ONBOARDING);
-    setInvites([]);
-    setStaffUsers(DEMO_USERS);
-    setSettings(DEFAULT_SETTINGS);
-    setAttachments({
-      "L-1000": [
-        { id: "f1", name: "Proposal_v2.pdf", date: "2025-06-15" },
-        { id: "f2", name: "Company_Overview.pdf", date: "2025-06-10" },
-      ],
-    });
-    setPartnerDocuments({
-      p1: [
-        {
-          id: "PD-1",
-          partnerId: "p1",
-          name: "Partner_Agreement_Signed.pdf",
-          type: "Agreement",
-          uploadedDate: "2024-03-12",
-          uploadedBy: "Marcus Reid",
-        },
-        {
-          id: "PD-2",
-          partnerId: "p1",
-          name: "NDA_Executed.pdf",
-          type: "NDA",
-          uploadedDate: "2024-03-12",
-          uploadedBy: "Marcus Reid",
-        },
-        {
-          id: "PD-3",
-          partnerId: "p1",
-          name: "Commission_Schedule.pdf",
-          type: "Commission Schedule",
-          uploadedDate: "2024-03-14",
-          uploadedBy: "Alexandra Pierce",
-        },
-      ],
-    });
   }, []);
 
   const refreshSupabaseState = useCallback(async () => {
@@ -762,8 +574,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       announcementReadsRes,
       notificationsRes,
       auditRes,
-      disputesRes,
-      disputeMessagesRes,
       onboardingRes,
       attachmentsRes,
       documentsRes,
@@ -783,8 +593,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       supabase.from("announcement_reads").select("*"),
       supabase.from("notifications").select("*").order("created_at", { ascending: false }),
       supabase.from("audit_log").select("*").order("created_at", { ascending: false }),
-      supabase.from("disputes").select("*").order("created_at", { ascending: false }),
-      supabase.from("dispute_messages").select("*").order("created_at", { ascending: true }),
       supabase
         .from("partner_onboarding_steps")
         .select("partner_id,completed,onboarding_steps(key)"),
@@ -810,8 +618,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       announcementReadsRes,
       notificationsRes,
       auditRes,
-      disputesRes,
-      disputeMessagesRes,
       onboardingRes,
       attachmentsRes,
       documentsRes,
@@ -823,7 +629,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (firstError) throw firstError;
 
     const payoutItems = payoutItemsRes.data || [];
-    const disputeMessages = disputeMessagesRes.data || [];
     const reads = announcementReadsRes.data || [];
 
     setPartners((partnersRes.data || []).map(mapPartner));
@@ -836,7 +641,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setAnnouncements((announcementsRes.data || []).map((row) => mapAnnouncement(row, reads)));
     setNotifications((notificationsRes.data || []).map(mapNotification));
     setAudit((auditRes.data || []).map(mapAudit));
-    setDisputes((disputesRes.data || []).map((row) => mapDispute(row, disputeMessages)));
     setOnboarding(groupOnboarding(onboardingRes.data || []));
     setAttachments(groupAttachments(attachmentsRes.data || []));
     setPartnerDocuments(groupPartnerDocuments(documentsRes.data || []));
@@ -858,7 +662,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         name: invitation.email,
         email: invitation.email,
         role: invitation.role,
-        tier: invitation.tier || undefined,
+        commissionRate:
+          invitation.commission_rate == null ? undefined : Number(invitation.commission_rate),
         invitedDate: invitation.created_at,
         status: "Invited",
       })),
@@ -867,10 +672,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!ready) return;
-    if (authMode === "demo") {
-      loadDemoState();
-      return;
-    }
     if (!realMode) {
       clearBusinessState();
       return;
@@ -880,7 +681,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toast.error("Unable to load Supabase business data.");
       clearBusinessState();
     });
-  }, [authMode, clearBusinessState, loadDemoState, ready, realMode, refreshSupabaseState]);
+  }, [clearBusinessState, ready, realMode, refreshSupabaseState]);
 
   const handleWriteError = useCallback((error: unknown, fallback = "Supabase write failed.") => {
     console.error(error);
@@ -975,13 +776,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async (l, actor) => {
       if (realMode && supabase) {
         const id = crypto.randomUUID();
-        const { data, error } = await supabase.rpc("submit_partner_lead", {
+        const { data, error } = await (supabase as any).rpc("submit_partner_lead", {
           lead_id: id,
           company_name: l.company,
           contact_name: l.contactName,
           contact_title: l.contactTitle,
           contact_email: l.contactEmail,
           contact_phone: l.contactPhone,
+          client_linkedin: l.clientLinkedin || null,
           country: l.country,
           industry: l.industry,
           estimated_value: l.estimatedValue,
@@ -999,11 +801,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
 
       const id = `L-${1100 + Math.floor(Math.random() * 9000)}`;
-      const status: LeadStatus = l.isDuplicate ? "Duplicate Under Review" : "Active";
+      const status: LeadStatus = l.isDuplicate ? "Duplicate Rejected" : "Open";
       const lead: Lead = {
         ...l,
         id,
-        stage: "New Lead",
+        stage: "Identified Opportunity",
         status,
         createdAt: nowIso(),
         lastActivity: nowIso(),
@@ -1031,9 +833,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setLeads((prev) =>
         prev.map((l) => {
           if (l.id !== id) return l;
-          const next = { ...l, stage, lastActivity: nowIso() } as Lead;
-          if (stage === "Closed Won") next.status = "Closed Won";
-          else if (stage === "Closed Lost") next.status = "Closed Lost";
+          const next = {
+            ...l,
+            stage,
+            previousStage: stage === "On Hold" && l.stage !== "On Hold" ? l.stage : l.previousStage,
+            status:
+              stage === "Closed Won"
+                ? "Closed Won"
+                : stage === "Closed Lost"
+                  ? "Closed Lost"
+                  : "Open",
+            lastActivity: nowIso(),
+          } as Lead;
           // Auto-create commission on Closed Won
           if (stage === "Closed Won") {
             const partner = partners.find((p) => p.id === l.partnerId);
@@ -1081,33 +892,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           reloadAfterWrite();
           return;
         }
-        const patch: Record<string, unknown> = {
-          stage,
-          last_activity_at: nowIso(),
-        };
-        if (stage === "Closed Won") patch.status = "Closed Won";
-        if (stage === "Closed Lost") {
-          patch.status = "Closed Lost";
-          patch.closed_reason = reason || "Closed lost";
-        }
         void (supabase as any)
-          .from("leads")
-          .update(patch)
-          .eq("id", id)
+          .rpc("update_lead_stage_secure", {
+            target_lead: id,
+            target_stage: stage,
+            change_reason: reason || null,
+          })
           .then(({ error }: { error: unknown }) => {
             if (error) handleWriteError(error);
-            if (!error && existing && stage !== "Closed Won") {
-              void notifyPartner(existing.partnerId, {
-                title: "Lead stage updated",
-                body: `${existing.company} moved to ${stage}.${reason ? ` Reason: ${reason}` : ""}`,
-                type: stage === "Closed Lost" ? "warning" : "info",
-              });
-            }
             reloadAfterWrite();
           });
       }
     },
-    [commissions, handleWriteError, leads, notifyPartner, partners, realMode, reloadAfterWrite],
+    [commissions, handleWriteError, leads, partners, realMode, reloadAfterWrite],
   );
 
   const updateLeadStatus: AppActions["updateLeadStatus"] = useCallback(
@@ -1135,7 +932,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       if (realMode && supabase) {
         const patch: Record<string, unknown> = { status, last_activity_at: nowIso() };
-        if (["Closed Lost", "Disqualified", "Reopened"].includes(status)) {
+        if (["Closed Lost"].includes(status)) {
           patch.closed_reason = reason || status;
         }
         if (status === "Duplicate Rejected") {
@@ -1153,11 +950,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 title: "Lead status updated",
                 body: `${lead.company} status changed to ${status}.${reason ? ` Reason: ${reason}` : ""}`,
                 type:
-                  status === "Closed Lost" ||
-                  status === "Duplicate Rejected" ||
-                  status === "Disqualified"
-                    ? "warning"
-                    : "info",
+                  status === "Closed Lost" || status === "Duplicate Rejected" ? "warning" : "info",
               });
             }
             reloadAfterWrite();
@@ -1196,7 +989,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   ...c,
                   rate: partner.commissionRate,
                   amount,
-                  state: c.state === "Paid" ? c.state : "On Hold",
+                  state: c.state,
                   closedDate: nowIso(),
                   kind: "Deal",
                 }
@@ -1264,13 +1057,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             rate: partner.commissionRate,
             base_amount: confirmedValue,
             amount,
-            state: "On Hold" as const,
             closed_date: new Date().toISOString().slice(0, 10),
             created_by: user?.id || null,
           };
           const { error: commissionError } = existing
             ? await supabase.from("commissions").update(payload).eq("id", existing.id)
-            : await supabase.from("commissions").insert(payload);
+            : await supabase.from("commissions").insert({ ...payload, state: "On Hold" });
           if (commissionError) handleWriteError(commissionError);
           await notifyPartner(lead.partnerId, {
             title: "Deal closed won",
@@ -1391,95 +1183,87 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [handleWriteError, leads, notifyPartner, realMode, reloadAfterWrite, user?.id],
   );
 
-  const approveDuplicate: AppActions["approveDuplicate"] = useCallback(
-    (leadId, actor, reason) => {
-      if (!reason.trim()) {
-        toast.error("Duplicate override reason is required.");
-        return;
+  const deleteLead: AppActions["deleteLead"] = useCallback(
+    async (leadId, actor) => {
+      const lead = leads.find((item) => item.id === leadId);
+      if (!lead) return false;
+      if (realMode && supabase) {
+        const storedFiles = attachments[leadId] || [];
+        const paths = storedFiles
+          .filter(
+            (file) => file.storageBucket === STORAGE_BUCKETS.leadAttachments && file.storagePath,
+          )
+          .map((file) => file.storagePath!);
+        if (paths.length) {
+          const { error: storageError } = await supabase.storage
+            .from(STORAGE_BUCKETS.leadAttachments)
+            .remove(paths);
+          if (storageError) {
+            handleWriteError(storageError, "Lead attachments could not be deleted.");
+            return false;
+          }
+        }
+        const { error } = await (supabase as any).rpc("delete_own_partner_lead", {
+          target_lead: leadId,
+        });
+        if (error) {
+          handleWriteError(error);
+          return false;
+        }
       }
-      setLeads((prev) =>
-        prev.map((l) => (l.id === leadId ? { ...l, status: "Active", lastActivity: nowIso() } : l)),
+      setLeads((previous) => previous.filter((item) => item.id !== leadId));
+      setAttachments((previous) => {
+        const next = { ...previous };
+        delete next[leadId];
+        return next;
+      });
+      pushAudit({
+        user: actor,
+        action: "Lead Deleted by Partner",
+        module: "Leads",
+        details: leadId,
+      });
+      reloadAfterWrite();
+      return true;
+    },
+    [attachments, handleWriteError, leads, realMode, reloadAfterWrite],
+  );
+
+  const updateEstimatedValue: AppActions["updateEstimatedValue"] = useCallback(
+    (leadId, value, actor) => {
+      const lead = leads.find((item) => item.id === leadId);
+      if (!lead || value <= 0) return;
+      setLeads((previous) =>
+        previous.map((item) =>
+          item.id === leadId ? { ...item, estimatedValue: value, lastActivity: nowIso() } : item,
+        ),
       );
       pushActivity({
         leadId,
-        type: "system",
+        type: "partner_update",
         user: actor,
-        text: `Duplicate override allowed: ${reason}`,
+        text: `Estimated deal value updated from ${lead.estimatedValue} to ${value}`,
       });
       pushAudit({
         user: actor,
-        action: "Duplicate Override Approved",
+        action: "Estimated Value Updated",
         module: "Leads",
-        details: `${leadId}: ${reason}`,
-      });
-      notify({
-        title: "Duplicate approved",
-        body: `Lead ${leadId} accepted into pipeline`,
-        type: "success",
+        details: leadId,
+        oldValue: String(lead.estimatedValue),
+        newValue: String(value),
       });
       if (realMode && supabase) {
-        const lead = leads.find((item) => item.id === leadId);
-        void (supabase.rpc as any)("review_duplicate_lead", {
-          lead_id: leadId,
-          allow_duplicate: true,
-          reason,
-        }).then(({ error }: { error: unknown }) => {
-          if (error) handleWriteError(error);
-          if (!error && lead) {
-            void notifyPartner(lead.partnerId, {
-              title: "Duplicate review complete",
-              body: `${lead.company} was accepted into the pipeline. Reason: ${reason}`,
-              type: "success",
-              mandatory: true,
-            });
-          }
-          reloadAfterWrite();
-        });
+        void supabase
+          .from("leads")
+          .update({ estimated_value: value, last_activity_at: nowIso() })
+          .eq("id", leadId)
+          .then(({ error }) => {
+            if (error) handleWriteError(error);
+            reloadAfterWrite();
+          });
       }
     },
-    [handleWriteError, leads, notifyPartner, realMode, reloadAfterWrite, user?.id],
-  );
-
-  const rejectDuplicate: AppActions["rejectDuplicate"] = useCallback(
-    (leadId, actor, reason) => {
-      setLeads((prev) =>
-        prev.map((l) =>
-          l.id === leadId ? { ...l, status: "Duplicate Rejected", lastActivity: nowIso() } : l,
-        ),
-      );
-      pushActivity({ leadId, type: "system", user: actor, text: `Duplicate rejected: ${reason}` });
-      pushAudit({
-        user: actor,
-        action: "Duplicate Rejected",
-        module: "Leads",
-        details: `${leadId}: ${reason}`,
-      });
-      notify({
-        title: "Duplicate rejected",
-        body: `Lead ${leadId} rejected as duplicate`,
-        type: "warning",
-      });
-      if (realMode && supabase) {
-        const lead = leads.find((item) => item.id === leadId);
-        void (supabase.rpc as any)("review_duplicate_lead", {
-          lead_id: leadId,
-          allow_duplicate: false,
-          reason,
-        }).then(({ error }: { error: unknown }) => {
-          if (error) handleWriteError(error);
-          if (!error && lead) {
-            void notifyPartner(lead.partnerId, {
-              title: "Lead rejected as duplicate",
-              body: `${lead.company} was rejected as duplicate. Reason: ${reason}`,
-              type: "warning",
-              mandatory: true,
-            });
-          }
-          reloadAfterWrite();
-        });
-      }
-    },
-    [handleWriteError, leads, notifyPartner, realMode, reloadAfterWrite, user?.id],
+    [handleWriteError, leads, realMode, reloadAfterWrite],
   );
 
   const addCall: AppActions["addCall"] = useCallback(
@@ -1613,7 +1397,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const downloadStoredFile: AppActions["downloadStoredFile"] = useCallback(
     async (bucket, path, name) => {
       if (!bucket || !path || !supabase || !realMode) {
-        toast.success("Download started (demo)");
+        toast.error("This document does not have an uploaded storage file.");
         return;
       }
 
@@ -1813,162 +1597,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [commissions, handleWriteError, notifyPartner, realMode, reloadAfterWrite],
   );
 
-  const openDispute: AppActions["openDispute"] = useCallback(
-    (commissionId, partnerId, reason, actor) => {
-      const partner = partners.find((p) => p.id === partnerId);
-      const d: Dispute = {
-        id: uid("D"),
-        commissionId,
-        partnerId,
-        openedDate: nowIso(),
-        reason,
-        status: "Open",
-        thread: [{ id: uid("t"), user: partner?.name || actor, text: reason, date: nowIso() }],
-      };
-      setDisputes((ds) => [d, ...ds]);
-      setCommissions((prev) =>
-        prev.map((c) => (c.id === commissionId ? { ...c, state: "Disputed" } : c)),
-      );
-      pushAudit({
-        user: actor,
-        action: "Dispute Opened",
-        module: "Commissions",
-        details: commissionId,
-      });
-      notify({
-        title: "Commission dispute opened",
-        body: `${commissionId} flagged by ${partner?.name || actor}`,
-        type: "warning",
-      });
-      if (realMode && supabase) {
-        void supabase
-          .rpc("open_commission_dispute", { commission_id: commissionId, reason })
-          .then(({ error }) => {
-            if (error) handleWriteError(error);
-            reloadAfterWrite();
-          });
-      }
-    },
-    [handleWriteError, partners, realMode, reloadAfterWrite],
-  );
-
-  const replyDispute: AppActions["replyDispute"] = useCallback(
-    (id, text, actor) => {
-      setDisputes((prev) =>
-        prev.map((d) =>
-          d.id === id
-            ? {
-                ...d,
-                status: "Under Review",
-                thread: [...d.thread, { id: uid("t"), user: actor, text, date: nowIso() }],
-              }
-            : d,
-        ),
-      );
-      if (realMode && supabase) {
-        void supabase
-          .from("dispute_messages")
-          .insert({
-            dispute_id: id,
-            actor_id: user?.id || null,
-            actor_name: actor,
-            text,
-          })
-          .then(({ error }) => {
-            if (error) handleWriteError(error);
-            reloadAfterWrite();
-          });
-      }
-    },
-    [handleWriteError, realMode, reloadAfterWrite, user?.id],
-  );
-
-  const resolveDispute: AppActions["resolveDispute"] = useCallback(
-    (id, resolution, accept, actor) => {
-      setDisputes((prev) =>
-        prev.map((d) => {
-          if (d.id !== id) return d;
-          const next: Dispute = {
-            ...d,
-            status: accept ? "Resolved" : "Rejected",
-            resolution,
-            thread: [
-              ...d.thread,
-              {
-                id: uid("t"),
-                user: actor,
-                text: `${accept ? "Resolved" : "Rejected"}: ${resolution}`,
-                date: nowIso(),
-              },
-            ],
-          };
-          setCommissions((prev2) =>
-            prev2.map((c) =>
-              c.id === d.commissionId ? { ...c, state: accept ? "Approved" : "Unpaid" } : c,
-            ),
-          );
-          pushAudit({
-            user: actor,
-            action: accept ? "Dispute Resolved" : "Dispute Rejected",
-            module: "Commissions",
-            details: d.commissionId,
-          });
-          notify({
-            title: accept ? "Dispute resolved" : "Dispute rejected",
-            body: `${d.commissionId}: ${resolution}`,
-            type: accept ? "success" : "warning",
-          });
-          return next;
-        }),
-      );
-      if (realMode && supabase) {
-        const dispute = disputes.find((d) => d.id === id);
-        void (async () => {
-          const { error: disputeError } = await supabase
-            .from("disputes")
-            .update({
-              status: accept ? "Resolved" : "Rejected",
-              resolution,
-              resolved_by: user?.id || null,
-              resolved_at: nowIso(),
-            })
-            .eq("id", id);
-          if (disputeError) {
-            handleWriteError(disputeError);
-            reloadAfterWrite();
-            return;
-          }
-          await supabase.from("dispute_messages").insert({
-            dispute_id: id,
-            actor_id: user?.id || null,
-            actor_name: actor,
-            text: `${accept ? "Resolved" : "Rejected"}: ${resolution}`,
-          });
-          if (dispute) {
-            const { error: commissionError } = await supabase
-              .from("commissions")
-              .update({ state: accept ? "Approved" : "Unpaid" })
-              .eq("id", dispute.commissionId);
-            if (commissionError) handleWriteError(commissionError);
-            await notifyPartner(dispute.partnerId, {
-              title: accept ? "Dispute resolved" : "Dispute rejected",
-              body: `${dispute.commissionId}: ${resolution}`,
-              type: accept ? "success" : "warning",
-              mandatory: true,
-            });
-          }
-          reloadAfterWrite();
-        })();
-      }
-    },
-    [disputes, handleWriteError, notifyPartner, realMode, reloadAfterWrite, user?.id],
-  );
-
   const requestPayout: AppActions["requestPayout"] = useCallback(
     (partnerId, commissionIds, message, actor) => {
       const amount = commissions
         .filter((c) => commissionIds.includes(c.id))
-        .reduce((s, c) => s + c.amount, 0);
+        .reduce((s, c) => s + Math.max(0, (c.eligibleAmount || c.amount) - (c.paidAmount || 0)), 0);
       const id = uid("PO");
       setPayouts((p) => [
         {
@@ -2113,7 +1746,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         prev.map((p) => {
           if (p.id !== id) return p;
           setCommissions((cs) =>
-            cs.map((c) => (p.commissionIds.includes(c.id) ? { ...c, state: "Paid" } : c)),
+            cs.map((c) =>
+              p.commissionIds.includes(c.id)
+                ? {
+                    ...c,
+                    state: (c.paidAmount || 0) + p.amount >= c.amount ? "Paid" : "Unpaid",
+                    paidAmount: Math.min(c.amount, (c.paidAmount || 0) + p.amount),
+                  }
+                : c,
+            ),
           );
           pushAudit({
             user: actor,
@@ -2139,30 +1780,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (realMode && supabase) {
         const payout = payouts.find((p) => p.id === id);
         void (async () => {
-          const { error: payoutError } = await supabase
-            .from("payout_requests")
-            .update({
-              status: "Paid",
-              paid_amount: payout?.amount || null,
-              paid_date: payload.date,
-              payment_method: payload.method,
-              transaction_reference: payload.reference,
-            })
-            .eq("id", id);
+          const { error: payoutError } = await (supabase as any).rpc("record_payout_paid", {
+            target_payout: id,
+            paid_on: payload.date,
+            method: payload.method,
+            reference: payload.reference,
+          });
           if (payoutError) handleWriteError(payoutError);
-          if (payout?.commissionIds.length) {
-            const { error: commissionError } = await supabase
-              .from("commissions")
-              .update({ state: "Paid" })
-              .in("id", payout.commissionIds);
-            if (commissionError) handleWriteError(commissionError);
-            await notifyPartner(payout.partnerId, {
-              title: "Payout marked as paid",
-              body: `${id} - ${payload.method} - ${payload.reference}`,
-              type: "success",
-              mandatory: true,
-            });
-          }
           reloadAfterWrite();
         })();
       }
@@ -2172,15 +1796,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const recordClientPayment: AppActions["recordClientPayment"] = useCallback(
     (payload, actor) => {
-      const triggerEligibility = Boolean(payload.triggerEligibility);
+      const triggerEligibility = true;
       const released = commissions.filter(
         (c) => c.leadId === payload.leadId && c.state === "On Hold",
       );
       setClientPayments((prev) => [{ ...payload, id: uid("CP") }, ...prev]);
-      if (triggerEligibility && released.length > 0) {
+      if (released.length > 0) {
         setCommissions((prev) =>
           prev.map((c) =>
-            c.leadId === payload.leadId && c.state === "On Hold" ? { ...c, state: "Unpaid" } : c,
+            c.leadId === payload.leadId && c.state === "On Hold"
+              ? {
+                  ...c,
+                  state: "Unpaid",
+                  eligibleAmount: Math.min(
+                    c.amount,
+                    (c.eligibleAmount || 0) + payload.amount * (c.rate / 100),
+                  ),
+                }
+              : c,
           ),
         );
       }
@@ -2195,7 +1828,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         body: `$${payload.amount.toLocaleString()} against ${payload.leadId}`,
         type: "success",
       });
-      if (triggerEligibility && released.length > 0) {
+      if (released.length > 0) {
         pushAudit({
           user: actor,
           action: "Commission Eligibility Triggered",
@@ -2210,36 +1843,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       if (realMode && supabase) {
         void (async () => {
-          const { error: paymentError } = await supabase.from("client_payments").insert({
-            lead_id: payload.leadId,
-            amount_received: payload.amount,
-            received_date: payload.date,
-            payment_method: payload.method,
-            payment_reference: payload.reference,
-            notes: payload.notes || null,
-            trigger_commission_eligibility: triggerEligibility,
-            created_by: user?.id || null,
-          });
+          const { error: paymentError } = await (supabase as any).rpc(
+            "record_client_payment_and_eligibility",
+            {
+              target_lead: payload.leadId,
+              payment_amount: payload.amount,
+              payment_date: payload.date,
+              payment_reference: payload.reference,
+              payment_method: payload.method,
+              payment_type: payload.paymentType,
+              payment_notes: payload.notes || null,
+            },
+          );
           if (paymentError) handleWriteError(paymentError);
-          if (triggerEligibility) {
-            const { error: commissionError } = await (supabase as any).rpc(
-              "trigger_commission_eligibility",
-              {
-                lead_id: payload.leadId,
-                payment_reference: payload.reference,
-              },
-            );
-            if (commissionError) handleWriteError(commissionError);
-            const lead = leads.find((item) => item.id === payload.leadId);
-            if (lead) {
-              await notifyPartner(lead.partnerId, {
-                title: "Commission now payable",
-                body: `${lead.company} released for payout after client payment.`,
-                type: "success",
-                mandatory: true,
-              });
-            }
-          }
           reloadAfterWrite();
         })();
       }
@@ -2291,11 +1907,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             );
             if (notificationError) handleWriteError(notificationError);
           }
+          if (target.target_type === "staff_roles" || target.target_type === "all_users") {
+            const roles = (target.target_rules as { roles?: string[] }).roles || [
+              "admin",
+              "super_admin",
+            ];
+            const recipients = staffUsers.filter(
+              (staff) => staff.accountStatus !== "deactivated" && roles.includes(staff.role),
+            );
+            if (recipients.length > 0) {
+              const { error: staffNotificationError } = await supabase.from("notifications").insert(
+                recipients.map((staff) => ({
+                  recipient_id: staff.id,
+                  title: "New announcement",
+                  body: `${a.priority}: ${a.title}`,
+                  type: a.priority === "Urgent" ? "warning" : "info",
+                  mandatory: a.priority === "Urgent",
+                })),
+              );
+              if (staffNotificationError) handleWriteError(staffNotificationError);
+            }
+          }
           reloadAfterWrite();
         })();
       }
     },
-    [handleWriteError, partners, realMode, reloadAfterWrite, user?.id],
+    [handleWriteError, partners, realMode, reloadAfterWrite, staffUsers, user?.id],
   );
 
   const markAnnouncementRead: AppActions["markAnnouncementRead"] = useCallback(
@@ -2794,7 +2431,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     announcements,
     notifications,
     audit,
-    disputes,
     onboarding,
     invites,
     staffUsers,
@@ -2807,16 +2443,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addComment,
     addAttachment,
     closeLeadWon,
-    approveDuplicate,
-    rejectDuplicate,
+    deleteLead,
+    updateEstimatedValue,
     addCall,
     overrideCommissionRate,
     addManualCommission,
     setCommissionState,
     waiveCommission,
-    openDispute,
-    replyDispute,
-    resolveDispute,
     requestPayout,
     approvePayout,
     rejectPayout,

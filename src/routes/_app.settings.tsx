@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Agreement publishing is introduced by the pending migration. */
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { PageHeader, PageContainer } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/card";
@@ -8,10 +9,10 @@ import { toast } from "sonner";
 import { Save } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
 import { FormDialog } from "@/components/common/dialogs";
+import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/_app/settings")({ component: Settings });
 
-const TIERS = ["Associate", "Specialist", "Partner"] as const;
 const splitList = (value: string) =>
   value
     .split(",")
@@ -24,7 +25,6 @@ const toForm = (s: StoreSettings) => ({
   industries: s.industries.join(", "),
   pipelineLabels: s.pipelineLabels.join(", "),
   onboardingSteps: s.onboardingSteps.join(", "),
-  tierLabels: s.tierLabels.join(", "),
 });
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -41,6 +41,10 @@ function Settings() {
   const { settings, updateSettings } = useStore();
   const [form, setForm] = useState(() => toForm(settings));
   const [pendingPatch, setPendingPatch] = useState<Partial<typeof settings> | null>(null);
+  const [agreementUrl, setAgreementUrl] = useState("");
+  const [ndaUrl, setNdaUrl] = useState("");
+  const [publishAgreementsOpen, setPublishAgreementsOpen] = useState(false);
+  const [publishingAgreements, setPublishingAgreements] = useState(false);
   useEffect(() => {
     setForm(toForm(settings));
   }, [settings]);
@@ -49,9 +53,9 @@ function Settings() {
   const buildPatch = () => ({
     defaultRate: Number(form.defaultRate),
     defaultRates: {
-      Associate: Number(form.defaultRates.Associate),
-      Specialist: Number(form.defaultRates.Specialist),
-      Partner: Number(form.defaultRates.Partner),
+      Associate: Number(form.defaultRate),
+      Specialist: Number(form.defaultRate),
+      Partner: Number(form.defaultRate),
     },
     staleThreshold: Number(form.staleThreshold),
     payoutWindow: Number(form.payoutWindow),
@@ -61,7 +65,6 @@ function Settings() {
     industries: splitList(form.industries),
     pipelineLabels: splitList(form.pipelineLabels),
     onboardingSteps: splitList(form.onboardingSteps),
-    tierLabels: splitList(form.tierLabels),
   });
 
   const save = () => {
@@ -78,9 +81,6 @@ function Settings() {
   function upd<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
     setForm((f) => ({ ...f, [k]: v }));
   }
-  const updTierRate = (tier: (typeof TIERS)[number], value: string) => {
-    setForm((f) => ({ ...f, defaultRates: { ...f.defaultRates, [tier]: Number(value) } }));
-  };
 
   return (
     <>
@@ -106,21 +106,6 @@ function Settings() {
               value={form.defaultRate}
               onChange={(e) => upd("defaultRate", Number(e.target.value))}
             />
-          </Row>
-          <Row label="Tier-specific default rates (%)">
-            <div className="grid gap-2 md:grid-cols-3">
-              {TIERS.map((tier) => (
-                <label key={tier} className="text-xs text-muted-foreground">
-                  {tier}
-                  <input
-                    type="number"
-                    className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm text-foreground"
-                    value={form.defaultRates[tier]}
-                    onChange={(e) => updTierRate(tier, e.target.value)}
-                  />
-                </label>
-              ))}
-            </div>
           </Row>
           <Row label="Payout window (days)">
             <input
@@ -190,13 +175,6 @@ function Settings() {
               onChange={(e) => upd("invitationExpiry", Number(e.target.value))}
             />
           </Row>
-          <Row label="Partner tier labels">
-            <input
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={form.tierLabels}
-              onChange={(e) => upd("tierLabels", e.target.value)}
-            />
-          </Row>
           <Row label="Onboarding checklist steps">
             <textarea
               rows={3}
@@ -205,6 +183,41 @@ function Settings() {
               onChange={(e) => upd("onboardingSteps", e.target.value)}
             />
           </Row>
+        </Card>
+
+        <Card className="p-5">
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Required Agreement Documents
+          </h3>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Publish secure PDF URLs for the Partner Agreement and NDA. Publishing creates new
+            versions and requires affected Sales Partners to sign the current versions.
+          </p>
+          <Row label="Partner Agreement PDF URL">
+            <input
+              type="url"
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+              placeholder="https://.../partner-agreement.pdf"
+              value={agreementUrl}
+              onChange={(event) => setAgreementUrl(event.target.value)}
+            />
+          </Row>
+          <Row label="NDA PDF URL">
+            <input
+              type="url"
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+              placeholder="https://.../nda.pdf"
+              value={ndaUrl}
+              onChange={(event) => setNdaUrl(event.target.value)}
+            />
+          </Row>
+          <Button
+            variant="outline"
+            disabled={!agreementUrl.startsWith("https://") || !ndaUrl.startsWith("https://")}
+            onClick={() => setPublishAgreementsOpen(true)}
+          >
+            Publish new document versions
+          </Button>
         </Card>
 
         <Card className="p-5">
@@ -250,7 +263,6 @@ function Settings() {
                       "defaultRates",
                       "pipelineLabels",
                       "currencies",
-                      "tierLabels",
                       "onboardingSteps",
                       "staleThreshold",
                       "payoutWindow",
@@ -261,6 +273,37 @@ function Settings() {
                 </div>
               ))}
         </div>
+      </FormDialog>
+
+      <FormDialog
+        open={publishAgreementsOpen}
+        onOpenChange={setPublishAgreementsOpen}
+        title="Publish Agreement and NDA"
+        submitLabel={publishingAgreements ? "Publishing..." : "Publish versions"}
+        canSubmit={
+          !publishingAgreements &&
+          agreementUrl.startsWith("https://") &&
+          ndaUrl.startsWith("https://")
+        }
+        onSubmit={async () => {
+          if (!supabase) return toast.error("Supabase is not configured.");
+          setPublishingAgreements(true);
+          const { error } = await (supabase as any).rpc("publish_required_agreements", {
+            agreement_url: agreementUrl,
+            nda_url: ndaUrl,
+          });
+          setPublishingAgreements(false);
+          if (error) return toast.error(error.message);
+          toast.success("New Agreement and NDA versions published.");
+          setPublishAgreementsOpen(false);
+          setAgreementUrl("");
+          setNdaUrl("");
+        }}
+      >
+        <p className="text-sm text-muted-foreground">
+          Existing acceptance records remain in version history. Sales Partners required to use
+          agreements will be gated until they sign these new active versions.
+        </p>
       </FormDialog>
     </>
   );

@@ -1,0 +1,14 @@
+alter type public.lead_stage add value if not exists 'Identified Opportunity';
+alter type public.lead_stage add value if not exists 'Outreach Started';
+alter type public.lead_stage add value if not exists 'In Communication';
+alter type public.lead_stage add value if not exists 'On Hold';
+alter type public.lead_stage add value if not exists 'Contract Sent';
+alter type public.lead_stage add value if not exists 'Advance Pending';
+alter type public.lead_stage add value if not exists 'Advance Confirmed';
+alter type public.lead_stage add value if not exists 'Sent to Product';
+alter type public.lead_stage add value if not exists 'Done by Product';
+alter type public.lead_stage add value if not exists 'Client Review';
+alter type public.lead_stage add value if not exists 'Under Revisions';
+alter type public.lead_stage add value if not exists 'Final Payment Clearance';
+alter type public.lead_stage add value if not exists 'Final Handoff';
+alter type public.lead_status add value if not exists 'Open';

@@ -43,7 +43,7 @@ function Invitation() {
     }
 
     toast.success(mode === "recovery" ? "Password updated" : "Invitation accepted");
-    nav({ to: "/dashboard" });
+    nav({ to: mode === "recovery" ? "/dashboard" : "/onboarding" });
   };
 
   return (
@@ -54,7 +54,7 @@ function Invitation() {
             G
           </div>
           <div>
-            <div className="text-sm font-semibold">GoAccelovate GTPP</div>
+            <div className="text-sm font-semibold">Go Accelerate Global Partner Program</div>
             <div className="text-xs text-muted-foreground">
               {mode === "recovery" ? "Password reset" : "Partner invitation"}
             </div>
@@ -63,7 +63,7 @@ function Invitation() {
         <h1 className="text-2xl font-semibold">
           {mode === "recovery"
             ? "Create a new password"
-            : "You've been invited to the GTPP Partner Portal"}
+            : "You've been invited to the Global Partner Program"}
         </h1>
         <p className="text-sm text-muted-foreground">
           {mode === "recovery"

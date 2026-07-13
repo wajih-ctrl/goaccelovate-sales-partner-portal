@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
-import { fmtCurrency, type CommissionState } from "@/lib/mock-data";
+import { fmtCurrency, type CommissionState } from "@/lib/domain";
 import { toast } from "sonner";
 import { Download, MoreHorizontal, Plus } from "lucide-react";
 import {
@@ -28,21 +28,34 @@ function Commissions() {
     addManualCommission,
     setCommissionState,
     waiveCommission,
-    openDispute,
+    payouts,
+    requestPayout,
   } = useStore();
   const isPartner = user?.role === "partner";
   const list = isPartner ? commissions.filter((c) => c.partnerId === user.partnerId) : commissions;
   const earned = list.reduce((s, c) => s + c.amount, 0);
-  const pending = list
-    .filter((c) => c.state === "Unpaid" || c.state === "Approved" || c.state === "Payout Requested")
-    .reduce((s, c) => s + c.amount, 0);
-  const paid = list.filter((c) => c.state === "Paid").reduce((s, c) => s + c.amount, 0);
+  const pending = list.reduce(
+    (sum, commission) =>
+      sum + Math.max(0, (commission.eligibleAmount || 0) - (commission.paidAmount || 0)),
+    0,
+  );
+  const paid = list.reduce((sum, commission) => sum + (commission.paidAmount || 0), 0);
 
   const [overrideId, setOverrideId] = useState<string | null>(null);
   const [newRate, setNewRate] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
   const [waiveId, setWaiveId] = useState<string | null>(null);
-  const [disputeId, setDisputeId] = useState<string | null>(null);
+  const [payoutOpen, setPayoutOpen] = useState(false);
+  const [selectedCommissions, setSelectedCommissions] = useState<string[]>([]);
+  const [payoutMessage, setPayoutMessage] = useState("");
+  const eligible = list.filter(
+    (commission) =>
+      commission.state === "Unpaid" &&
+      (commission.eligibleAmount || 0) - (commission.paidAmount || 0) > 0,
+  );
+  const payoutHistory = isPartner
+    ? payouts.filter((payout) => payout.partnerId === user?.partnerId)
+    : [];
   const wonLeads = leads.filter((l) => l.status === "Closed Won" || l.stage === "Closed Won");
   const [manualOpen, setManualOpen] = useState(false);
   const [manual, setManual] = useState({
@@ -96,10 +109,17 @@ function Commissions() {
                 Add manual line
               </Button>
             )}
-            <Button variant="outline" onClick={exportCsv}>
-              <Download className="mr-2 h-4 w-4" />
-              Export
-            </Button>
+            {!isPartner && (
+              <Button variant="outline" onClick={exportCsv}>
+                <Download className="mr-2 h-4 w-4" />
+                Export
+              </Button>
+            )}
+            {isPartner && (
+              <Button onClick={() => setPayoutOpen(true)} disabled={eligible.length === 0}>
+                Request Payout
+              </Button>
+            )}
           </>
         }
       />
@@ -120,130 +140,175 @@ function Commissions() {
         </div>
 
         <Card className="shadow-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 text-left">Deal</th>
-                <th className="px-4 py-3 text-left">Type</th>
-                {!isPartner && <th className="px-4 py-3 text-left">Partner</th>}
-                <th className="px-4 py-3 text-left">Closed</th>
-                <th className="px-4 py-3 text-right">Rate</th>
-                <th className="px-4 py-3 text-right">Amount</th>
-                <th className="px-4 py-3 text-left">State</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((c) => {
-                const lead = leads.find((l) => l.id === c.leadId);
-                const partner = partners.find((p) => p.id === c.partnerId);
-                return (
-                  <tr key={c.id} className="border-t hover:bg-accent/20">
-                    <td className="px-4 py-3">
-                      <Link
-                        to="/leads/$id"
-                        params={{ id: c.leadId }}
-                        className="font-medium hover:underline"
-                      >
-                        {c.label || lead?.company || c.leadId}
-                      </Link>
-                      {c.notes && (
-                        <div className="text-[11px] text-muted-foreground">{c.notes}</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{c.kind || "Deal"}</td>
-                    {!isPartner && <td className="px-4 py-3">{partner?.name}</td>}
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {new Date(c.closedDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-right">{c.rate}%</td>
-                    <td className="px-4 py-3 text-right font-semibold">{fmtCurrency(c.amount)}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={c.state} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {!isPartner && (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setOverrideId(c.id);
-                                setNewRate(String(c.rate));
-                              }}
-                            >
-                              Override rate
-                            </DropdownMenuItem>
-                          )}
-                          {!isPartner && (
-                            <>
+          <div className="responsive-table-scroll">
+            <table className="min-w-[980px] w-full whitespace-nowrap text-sm">
+              <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left">Deal</th>
+                  <th className="px-4 py-3 text-left">Type</th>
+                  {!isPartner && <th className="px-4 py-3 text-left">Partner</th>}
+                  <th className="px-4 py-3 text-left">Closed</th>
+                  <th className="px-4 py-3 text-right">Rate</th>
+                  <th className="px-4 py-3 text-right">Amount</th>
+                  <th className="px-4 py-3 text-right">Payable</th>
+                  <th className="px-4 py-3 text-right">Paid</th>
+                  <th className="px-4 py-3 text-left">State</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((c) => {
+                  const lead = leads.find((l) => l.id === c.leadId);
+                  const partner = partners.find((p) => p.id === c.partnerId);
+                  return (
+                    <tr key={c.id} className="border-t hover:bg-accent/20">
+                      <td className="px-4 py-3">
+                        <Link
+                          to="/leads/$id"
+                          params={{ id: c.leadId }}
+                          className="font-medium hover:underline"
+                        >
+                          {c.label || lead?.company || c.leadId}
+                        </Link>
+                        {c.notes && (
+                          <div className="text-[11px] text-muted-foreground">{c.notes}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {c.kind || "Deal"}
+                      </td>
+                      {!isPartner && <td className="px-4 py-3">{partner?.name}</td>}
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {new Date(c.closedDate).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">{c.rate}%</td>
+                      <td className="px-4 py-3 text-right font-semibold">
+                        {fmtCurrency(c.amount)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {fmtCurrency(Math.max(0, (c.eligibleAmount || 0) - (c.paidAmount || 0)))}
+                      </td>
+                      <td className="px-4 py-3 text-right">{fmtCurrency(c.paidAmount || 0)}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={c.state} />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {!isPartner && (
                               <DropdownMenuItem
                                 onClick={() => {
-                                  setCommissionState(
-                                    c.id,
-                                    "On Hold" as CommissionState,
-                                    user!.name,
-                                  );
-                                  toast.warning("Commission put on hold");
+                                  setOverrideId(c.id);
+                                  setNewRate(String(c.rate));
                                 }}
                               >
-                                Put on hold
+                                Override rate
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setWaiveId(c.id)}>
-                                Waive
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setCommissionState(
-                                    c.id,
-                                    "Approved" as CommissionState,
-                                    user!.name,
-                                  );
-                                  toast.success("Commission approved");
-                                }}
-                              >
-                                Approve
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                          {isPartner && c.state !== "Paid" && c.state !== "Disputed" && (
-                            <DropdownMenuItem onClick={() => setDisputeId(c.id)}>
-                              Open dispute
+                            )}
+                            {!isPartner && (
+                              <>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setCommissionState(
+                                      c.id,
+                                      "On Hold" as CommissionState,
+                                      user!.name,
+                                    );
+                                    toast.warning("Commission put on hold");
+                                  }}
+                                >
+                                  Put on hold
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setWaiveId(c.id)}>
+                                  Waive
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setCommissionState(
+                                      c.id,
+                                      "Approved" as CommissionState,
+                                      user!.name,
+                                    );
+                                    toast.success("Commission approved");
+                                  }}
+                                >
+                                  Approve
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            <DropdownMenuItem asChild>
+                              <Link to="/leads/$id" params={{ id: c.leadId }}>
+                                View deal
+                              </Link>
                             </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem asChild>
-                            <Link to="/leads/$id" params={{ id: c.leadId }}>
-                              View deal
-                            </Link>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {list.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={isPartner ? 7 : 8}
+                      className="py-10 text-center text-muted-foreground"
+                    >
+                      No commissions yet.
                     </td>
                   </tr>
-                );
-              })}
-              {list.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={isPartner ? 7 : 8}
-                    className="py-10 text-center text-muted-foreground"
-                  >
-                    No commissions yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Card>
 
         {isPartner && (
-          <Card className="p-4 text-xs text-muted-foreground">
-            Commissions become eligible for payout once GoAccelovate confirms the corresponding
-            client payment. Internal client revenue figures are not visible.
+          <Card className="shadow-card overflow-hidden">
+            <div className="border-b bg-accent/40 px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Payout history
+            </div>
+            <div className="responsive-table-scroll">
+              <table className="min-w-[700px] w-full whitespace-nowrap text-sm">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left">Request</th>
+                    <th className="px-4 py-3 text-left">Requested</th>
+                    <th className="px-4 py-3 text-right">Amount</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Payment reference / reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payoutHistory.map((payout) => (
+                    <tr key={payout.id} className="border-t">
+                      <td className="px-4 py-3 font-medium">{payout.id}</td>
+                      <td className="px-4 py-3">
+                        {new Date(payout.requestedDate).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">{fmtCurrency(payout.amount)}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={payout.status} />
+                      </td>
+                      <td className="px-4 py-3">
+                        {payout.reference || payout.rejectReason || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                  {payoutHistory.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                        No payout requests yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </Card>
         )}
       </PageContainer>
@@ -412,20 +477,58 @@ function Commissions() {
         }}
       />
 
-      <ReasonDialog
-        open={!!disputeId}
-        onOpenChange={(b) => !b && setDisputeId(null)}
-        title="Open commission dispute"
-        description="Describe the issue. The Admin team will review and respond."
-        confirmLabel="Open dispute"
-        destructive={false}
-        placeholder="Explain why you believe this commission is incorrect…"
-        onConfirm={(reason) => {
-          openDispute(disputeId!, user!.partnerId!, reason, user!.name);
-          toast.success("Dispute opened");
-          setDisputeId(null);
+      <FormDialog
+        open={payoutOpen}
+        onOpenChange={setPayoutOpen}
+        title="Request payout"
+        submitLabel="Submit request"
+        canSubmit={selectedCommissions.length > 0}
+        onSubmit={() => {
+          requestPayout(user!.partnerId!, selectedCommissions, payoutMessage.trim(), user!.name);
+          toast.success("Payout request submitted");
+          setPayoutOpen(false);
+          setSelectedCommissions([]);
+          setPayoutMessage("");
         }}
-      />
+      >
+        <div className="space-y-2">
+          {eligible.map((commission) => {
+            const lead = leads.find((item) => item.id === commission.leadId);
+            const balance = (commission.eligibleAmount || 0) - (commission.paidAmount || 0);
+            return (
+              <label
+                key={commission.id}
+                className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm"
+              >
+                <span className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedCommissions.includes(commission.id)}
+                    onChange={(event) =>
+                      setSelectedCommissions((current) =>
+                        event.target.checked
+                          ? [...current, commission.id]
+                          : current.filter((id) => id !== commission.id),
+                      )
+                    }
+                  />
+                  {lead?.company || commission.id}
+                </span>
+                <strong>{fmtCurrency(balance)}</strong>
+              </label>
+            );
+          })}
+        </div>
+        <label className="text-xs">
+          Message (optional)
+          <textarea
+            rows={3}
+            className="mt-1 w-full rounded-md border bg-background p-2 text-sm"
+            value={payoutMessage}
+            onChange={(event) => setPayoutMessage(event.target.value)}
+          />
+        </label>
+      </FormDialog>
     </>
   );
 }
