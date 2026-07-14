@@ -1,5 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Agreement acceptance tables are newer than the generated client types. */
 import { createFileRoute, Navigate, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Printer } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { PageContainer, PageHeader } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
@@ -11,18 +13,54 @@ import {
   populateLegalText,
 } from "@/lib/legal-documents";
 import { useStore } from "@/lib/store";
+import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/_app/legal/$type")({ component: LegalDocumentPage });
+
+type AgreementAcceptance = {
+  signer_name: string;
+  signed_at: string;
+};
 
 function LegalDocumentPage() {
   const { type } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { partners } = useStore();
+  const [acceptance, setAcceptance] = useState<AgreementAcceptance | null>(null);
+  const [acceptanceLoading, setAcceptanceLoading] = useState(user?.role === "partner");
+
+  useEffect(() => {
+    if (!supabase || user?.role !== "partner" || !user.partnerId) {
+      setAcceptanceLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const documentType = type === "nda" ? "NDA" : "Agreement";
+    void (supabase as any)
+      .from("partner_agreement_acceptances")
+      .select("signer_name,signed_at,agreement_documents!inner(document_type,is_active)")
+      .eq("partner_id", user.partnerId)
+      .eq("agreement_documents.document_type", documentType)
+      .eq("agreement_documents.is_active", true)
+      .maybeSingle()
+      .then(({ data }: { data: AgreementAcceptance | null; error: { message: string } | null }) => {
+        if (!cancelled) {
+          setAcceptance(data);
+          setAcceptanceLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [type, user?.partnerId, user?.role]);
+
   if (type !== "agreement" && type !== "nda") return <Navigate to="/onboarding" replace />;
 
   const partner = partners.find((item) => item.id === user?.partnerId);
-  if (user?.role === "partner" && user.partnerId && !partner) {
+  if (user?.role === "partner" && user.partnerId && (!partner || acceptanceLoading)) {
     return (
       <>
         <PageHeader title="Preparing document" description="Loading your current partner terms." />
@@ -55,10 +93,16 @@ function LegalDocumentPage() {
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back
               </Button>
-              <Button onClick={() => window.print()}>
-                <Printer className="mr-2 h-4 w-4" />
-                Print / Save PDF
-              </Button>
+              {user?.role === "partner" && !acceptance ? (
+                <Button onClick={() => navigate({ to: "/onboarding" })}>
+                  Sign Agreement and NDA
+                </Button>
+              ) : (
+                <Button onClick={() => window.print()}>
+                  <Printer className="mr-2 h-4 w-4" />
+                  Print signed PDF
+                </Button>
+              )}
             </div>
           }
         />
@@ -126,8 +170,29 @@ function LegalDocumentPage() {
                 </div>
                 <div className="space-y-3 text-sm">
                   <div className="font-semibold">For {partnerName}</div>
-                  <div className="pt-5">Signature: _________________________</div>
-                  <div>Date: _________________________</div>
+                  {acceptance ? (
+                    <>
+                      <div className="pt-5">
+                        Electronic signature:{" "}
+                        <span className="font-serif text-base italic">
+                          {acceptance.signer_name}
+                        </span>
+                      </div>
+                      <div>
+                        Date:{" "}
+                        {new Date(acceptance.signed_at).toLocaleDateString(undefined, {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="pt-5">Electronic signature: Pending</div>
+                      <div>Date: Pending</div>
+                    </>
+                  )}
                 </div>
               </div>
             </section>

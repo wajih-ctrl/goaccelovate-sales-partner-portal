@@ -27,13 +27,16 @@ function Onboarding() {
   const { onboarding } = useStore();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<AgreementDocument[]>([]);
-  const [documentsLoading, setDocumentsLoading] = useState(user?.agreementsComplete === false);
+  const [documentsLoading, setDocumentsLoading] = useState(true);
   const [legalName, setLegalName] = useState(user?.name || "");
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!supabase || user?.agreementsComplete !== false) return;
+    if (!supabase || user?.role !== "partner") {
+      setDocumentsLoading(false);
+      return;
+    }
     void (supabase as any)
       .from("agreement_documents")
       .select("id,document_type,title,version,content_url")
@@ -52,7 +55,7 @@ function Onboarding() {
           setDocumentsLoading(false);
         },
       );
-  }, [user?.agreementsComplete]);
+  }, [user?.role]);
 
   if (user?.role !== "partner") return <Navigate to="/access-denied" />;
   const status = onboarding[user.partnerId!] || {};
@@ -120,14 +123,26 @@ function Onboarding() {
               </div>
             )}
 
-            <label className="block text-xs font-medium">
-              Legal name
-              <input
-                className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm sm:max-w-md"
-                value={legalName}
-                onChange={(event) => setLegalName(event.target.value)}
-              />
-            </label>
+            <div className="grid gap-3 sm:max-w-2xl sm:grid-cols-2">
+              <label className="block text-xs font-medium">
+                Electronic signature
+                <input
+                  className="mt-1 h-10 w-full rounded-md border bg-background px-3 font-serif text-base italic"
+                  value={legalName}
+                  onChange={(event) => setLegalName(event.target.value)}
+                  autoComplete="name"
+                />
+              </label>
+              <label className="block text-xs font-medium">
+                Signature date
+                <input
+                  type="date"
+                  className="mt-1 h-10 w-full rounded-md border bg-muted px-3 text-sm"
+                  value={new Date().toISOString().slice(0, 10)}
+                  readOnly
+                />
+              </label>
+            </div>
             <label className="flex items-start gap-2 text-sm">
               <input
                 type="checkbox"
@@ -151,7 +166,7 @@ function Onboarding() {
         )}
 
         {user.agreementsComplete !== false && (
-          <Card className="p-5">
+          <Card className="space-y-6 p-5">
             <div className="mb-4 flex items-center justify-between gap-4">
               <div>
                 <div className="text-sm font-semibold">
@@ -190,6 +205,31 @@ function Onboarding() {
                 );
               })}
             </ul>
+            {documentsReady && (
+              <div className="border-t pt-5">
+                <h3 className="mb-3 text-sm font-semibold">Signed documents</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {documents.map((document) => (
+                    <Link
+                      key={document.id}
+                      to="/legal/$type"
+                      params={{
+                        type: document.document_type === "Agreement" ? "agreement" : "nda",
+                      }}
+                      className="flex items-center justify-between rounded-md border p-3 text-sm hover:bg-accent/30"
+                    >
+                      <span>
+                        <strong>{document.title}</strong>
+                        <span className="block text-xs text-muted-foreground">
+                          Signed {document.document_type} version {document.version}
+                        </span>
+                      </span>
+                      <FileText className="h-4 w-4" />
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </Card>
         )}
       </PageContainer>
