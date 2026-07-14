@@ -7,7 +7,7 @@ import { fmtCurrency, daysSince, type LeadStage } from "@/lib/domain";
 import { FormDialog, ReasonDialog } from "@/components/common/dialogs";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { canMoveLeadStage, LEAD_STAGES } from "@/lib/program";
+import { allowedLeadStageTargets, canMoveLeadStage, LEAD_STAGES } from "@/lib/program";
 import { KanbanSquare, List } from "lucide-react";
 import { PipelineListPanel } from "@/components/pipeline/PipelineListPanel";
 
@@ -72,7 +72,7 @@ function Pipeline() {
     const lead = leads.find((l) => l.id === move.leadId);
     if (!lead) return;
     if (!canMoveLeadStage(user!.role, lead.stage, move.targetStage, lead.previousStage)) {
-      toast.error("An On Hold lead must return to its previous stage.");
+      toast.error("Your role cannot move this lead to that stage.");
       return;
     }
     if (move.targetStage === "Closed Won" && lead.stage !== "Closed Won" && !lead.confirmedValue) {
@@ -95,7 +95,7 @@ function Pipeline() {
     const lead = leads.find((l) => l.id === leadId);
     if (!lead || lead.stage === targetStage) return;
     if (!canMoveLeadStage(user!.role, lead.stage, targetStage, lead.previousStage)) {
-      toast.error("An On Hold lead must return to its previous stage.");
+      toast.error("Your role cannot move this lead to that stage.");
       return;
     }
     const move = { leadId, targetStage };
@@ -174,11 +174,21 @@ function Pipeline() {
                     {items.map((l) => {
                       const p = partners.find((pp) => pp.id === l.partnerId);
                       const active = dragging?.id === l.id;
+                      const allowedTargets = allowedLeadStageTargets(
+                        user!.role,
+                        l.stage,
+                        l.previousStage,
+                      );
+                      const canDrag = allowedTargets.some((target) => target !== l.stage);
                       return (
                         <div
                           key={l.id}
-                          draggable
+                          draggable={canDrag}
                           onDragStart={(e) => {
+                            if (!canDrag) {
+                              e.preventDefault();
+                              return;
+                            }
                             setDragging({ id: l.id, stage: l.stage });
                             e.dataTransfer.effectAllowed = "move";
                             e.dataTransfer.setData("text/plain", l.id);
@@ -195,7 +205,7 @@ function Pipeline() {
                                 beforeId: l.id,
                               });
                           }}
-                          className={`cursor-grab rounded-md border bg-card p-3 text-sm shadow-card transition active:cursor-grabbing ${active ? "opacity-50 ring-2 ring-brand/30" : "hover:border-ring"}`}
+                          className={`rounded-md border bg-card p-3 text-sm shadow-card transition ${canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-default"} ${active ? "opacity-50 ring-2 ring-brand/30" : "hover:border-ring"}`}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <Link
@@ -206,7 +216,7 @@ function Pipeline() {
                               {l.company}
                             </Link>
                             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                              Drag
+                              {canDrag ? "Drag" : "Locked"}
                             </span>
                           </div>
                           <div className="mt-0.5 text-xs text-muted-foreground">{p?.name}</div>
@@ -222,9 +232,10 @@ function Pipeline() {
                           <select
                             value={l.stage}
                             onChange={(e) => stageSelect(l.id, e.target.value as LeadStage)}
+                            disabled={allowedTargets.length <= 1}
                             className="mt-2 h-7 w-full rounded-md border bg-background px-2 text-[11px]"
                           >
-                            {STAGES.map((s) => (
+                            {allowedTargets.map((s) => (
                               <option key={s}>{s}</option>
                             ))}
                           </select>

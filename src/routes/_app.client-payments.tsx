@@ -9,16 +9,18 @@ import { toast } from "sonner";
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { FormDialog } from "@/components/common/dialogs";
-import { LEAD_STAGES } from "@/lib/program";
+import { canRecordClientPayment } from "@/lib/program";
 
 export const Route = createFileRoute("/_app/client-payments")({ component: ClientPayments });
 
 function ClientPayments() {
   const { user } = useAuth();
   const { leads, clientPayments, recordClientPayment } = useStore();
-  const paymentStageIndex = LEAD_STAGES.indexOf("Advance Confirmed");
-  const eligibleLeads = leads.filter(
-    (lead) => LEAD_STAGES.indexOf(lead.stage) >= paymentStageIndex,
+  const eligibleLeads = leads.filter((lead) => canRecordClientPayment("Advance", lead.stage));
+  const paymentSummaryLeads = leads.filter(
+    (lead) =>
+      canRecordClientPayment("Advance", lead.stage) ||
+      clientPayments.some((payment) => payment.leadId === lead.id),
   );
   const [open, setOpen] = useState(false);
   const empty = {
@@ -62,7 +64,7 @@ function ClientPayments() {
                 </tr>
               </thead>
               <tbody>
-                {eligibleLeads.map((lead) => {
+                {paymentSummaryLeads.map((lead) => {
                   const payments = clientPayments.filter((payment) => payment.leadId === lead.id);
                   const advance = payments
                     .filter((payment) => payment.paymentType === "Advance")
@@ -118,7 +120,7 @@ function ClientPayments() {
                       </td>
                       <td className="px-4 py-3">{cp.paymentType || "—"}</td>
                       <td className="px-4 py-3 text-right font-semibold">
-                        {fmtCurrency(cp.amount)}
+                        {fmtCurrency(cp.amount, lead?.currency)}
                       </td>
                       <td className="px-4 py-3">{cp.method}</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{cp.notes}</td>
@@ -154,7 +156,9 @@ function ClientPayments() {
           !!form.leadId &&
           !!form.amount &&
           !isNaN(Number(form.amount)) &&
+          Number(form.amount) > 0 &&
           !!form.reference.trim() &&
+          !!form.method.trim() &&
           !!form.date
         }
         onSubmit={() => {
@@ -185,12 +189,7 @@ function ClientPayments() {
             onChange={(e) => setForm({ ...form, leadId: e.target.value })}
           >
             {eligibleLeads
-              .filter((lead) =>
-                form.paymentType === "Advance"
-                  ? LEAD_STAGES.indexOf(lead.stage) >= LEAD_STAGES.indexOf("Advance Confirmed")
-                  : LEAD_STAGES.indexOf(lead.stage) >=
-                    LEAD_STAGES.indexOf("Final Payment Clearance"),
-              )
+              .filter((lead) => canRecordClientPayment(form.paymentType, lead.stage))
               .map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.company}

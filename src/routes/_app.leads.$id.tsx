@@ -199,7 +199,7 @@ function LeadDetail() {
               <div className="mt-1 text-xl font-semibold">
                 {fmtCurrency(lead.estimatedValue, lead.currency)}
               </div>
-              {isAdmin && isCommercialStage(lead.stage) && (
+              {isAdmin && isCommercialStage(lead.stage, lead.previousStage) && (
                 <Button
                   className="mt-2"
                   size="sm"

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 import { daysSince, fmtCurrency, type LeadStage } from "@/lib/domain";
-import { canMoveLeadStage, LEAD_STAGES } from "@/lib/program";
+import { allowedLeadStageTargets, canMoveLeadStage, LEAD_STAGES } from "@/lib/program";
 import { useStore } from "@/lib/store";
 
 const STAGES: (LeadStage | "All")[] = ["All", ...LEAD_STAGES];
@@ -227,7 +227,10 @@ export function PipelineListPanel() {
                         onChange={(event) => changeStage(lead.id, event.target.value as LeadStage)}
                         className="h-8 max-w-56 rounded-md border bg-background px-2 text-xs"
                       >
-                        {LEAD_STAGES.map((item) => (
+                        {(user
+                          ? allowedLeadStageTargets(user.role, lead.stage, lead.previousStage)
+                          : [lead.stage]
+                        ).map((item) => (
                           <option key={item}>{item}</option>
                         ))}
                       </select>

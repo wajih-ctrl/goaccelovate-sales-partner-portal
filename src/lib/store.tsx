@@ -6,7 +6,7 @@ import { buildStoragePath, STORAGE_BUCKETS, validateUploadFile } from "./file-up
 import type { Json } from "./database.types";
 import { isSupabaseConfigured, supabase } from "./supabase";
 import { isAnnouncementTargeted } from "./announcements";
-import { INDUSTRIES, LEAD_STAGES } from "./program";
+import { canMoveLeadStage, INDUSTRIES, isCommercialStage, LEAD_STAGES } from "./program";
 import {
   ONBOARDING_STEPS,
   fmtCurrency,
@@ -967,6 +967,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const updateLeadStage: AppActions["updateLeadStage"] = useCallback(
     (id, stage, actor, reason) => {
+      const existing = leads.find((lead) => lead.id === id);
+      if (!existing || !user) return;
+      if (!canMoveLeadStage(user.role, existing.stage, stage, existing.previousStage)) {
+        toast.error("Your role cannot move this lead to that stage.");
+        return;
+      }
+      if (stage === "Closed Lost" && !reason?.trim()) {
+        toast.error("A Closed Lost reason is required.");
+        return;
+      }
+      if (stage === "Closed Won" && !existing.confirmedValue) {
+        toast.error("Closed Won requires a confirmed deal value.");
+        return;
+      }
       setLeads((prev) =>
         prev.map((l) => {
           if (l.id !== id) return l;
@@ -1023,12 +1037,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
       );
       if (realMode && supabase) {
-        const existing = leads.find((lead) => lead.id === id);
-        if (stage === "Closed Won" && !existing?.confirmedValue) {
-          toast.error("Closed Won requires a confirmed deal value.");
-          reloadAfterWrite();
-          return;
-        }
         void (supabase as any)
           .rpc("update_lead_stage_secure", {
             target_lead: id,
@@ -1041,7 +1049,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           });
       }
     },
-    [commissions, handleWriteError, leads, partners, realMode, reloadAfterWrite],
+    [commissions, handleWriteError, leads, partners, realMode, reloadAfterWrite, user],
   );
 
   const updateLeadStatus: AppActions["updateLeadStatus"] = useCallback(
@@ -1100,7 +1108,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const closeLeadWon: AppActions["closeLeadWon"] = useCallback(
     (id, confirmedValue, actor) => {
       const lead = leads.find((l) => l.id === id);
-      if (!lead) return;
+      if (!lead || !user) return;
+      if (!canMoveLeadStage(user.role, lead.stage, "Closed Won", lead.previousStage)) {
+        toast.error("Only Admin or Super Admin can close a deal as won.");
+        return;
+      }
+      if (!Number.isFinite(confirmedValue) || confirmedValue <= 0) {
+        toast.error("Confirmed deal value must be a positive number.");
+        return;
+      }
       const partner = partners.find((p) => p.id === lead.partnerId);
       if (!partner) return;
       const amount = confirmedValue * (partner.commissionRate / 100);
@@ -1168,59 +1184,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         mandatory: true,
       });
       if (realMode && supabase) {
-        void (async () => {
-          const { error: leadError } = await supabase
-            .from("leads")
-            .update({
-              stage: "Closed Won",
-              status: "Closed Won",
-              confirmed_value: confirmedValue,
-              last_activity_at: nowIso(),
-            })
-            .eq("id", id);
-          if (leadError) {
-            handleWriteError(leadError);
+        void (supabase as any)
+          .rpc("close_lead_won_secure", {
+            target_lead: id,
+            confirmed_deal_value: confirmedValue,
+          })
+          .then(({ error }: { error: unknown }) => {
+            if (error) handleWriteError(error);
             reloadAfterWrite();
-            return;
-          }
-
-          const existing = commissions.find(
-            (c) => c.leadId === id && (c.kind || "Deal") === "Deal",
-          );
-          const payload = {
-            lead_id: id,
-            partner_id: lead.partnerId,
-            kind: "Deal" as const,
-            rate: partner.commissionRate,
-            base_amount: confirmedValue,
-            amount,
-            closed_date: new Date().toISOString().slice(0, 10),
-            created_by: user?.id || null,
-          };
-          const { error: commissionError } = existing
-            ? await supabase.from("commissions").update(payload).eq("id", existing.id)
-            : await supabase.from("commissions").insert({ ...payload, state: "On Hold" });
-          if (commissionError) handleWriteError(commissionError);
-          await notifyPartner(lead.partnerId, {
-            title: "Deal closed won",
-            body: `${lead.company} commission is on hold until payment eligibility.`,
-            type: "success",
-            mandatory: true,
           });
-          reloadAfterWrite();
-        })();
       }
     },
-    [
-      commissions,
-      handleWriteError,
-      leads,
-      notifyPartner,
-      partners,
-      realMode,
-      reloadAfterWrite,
-      user?.id,
-    ],
+    [commissions, handleWriteError, leads, partners, realMode, reloadAfterWrite, user],
   );
 
   const addComment: AppActions["addComment"] = useCallback(
@@ -1369,7 +1344,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateEstimatedValue: AppActions["updateEstimatedValue"] = useCallback(
     (leadId, value, actor) => {
       const lead = leads.find((item) => item.id === leadId);
-      if (!lead || value <= 0) return;
+      if (!lead || !user || value <= 0) return;
+      if (
+        (user.role !== "admin" && user.role !== "super_admin") ||
+        !isCommercialStage(lead.stage, lead.previousStage)
+      ) {
+        toast.error("Commercial value can be edited by Admin from Contract Sent onward.");
+        return;
+      }
       setLeads((previous) =>
         previous.map((item) =>
           item.id === leadId ? { ...item, estimatedValue: value, lastActivity: nowIso() } : item,
@@ -1390,17 +1372,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         newValue: String(value),
       });
       if (realMode && supabase) {
-        void supabase
-          .from("leads")
-          .update({ estimated_value: value, last_activity_at: nowIso() })
-          .eq("id", leadId)
-          .then(({ error }) => {
+        void (supabase as any)
+          .rpc("update_lead_commercial_value_secure", {
+            target_lead: leadId,
+            new_value: value,
+          })
+          .then(({ error }: { error: unknown }) => {
             if (error) handleWriteError(error);
             reloadAfterWrite();
           });
       }
     },
-    [handleWriteError, leads, realMode, reloadAfterWrite],
+    [handleWriteError, leads, realMode, reloadAfterWrite, user],
   );
 
   const addCall: AppActions["addCall"] = useCallback(
@@ -1797,30 +1780,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
       );
       if (realMode && supabase) {
-        const payout = payouts.find((p) => p.id === id);
-        void (async () => {
-          const { error: payoutError } = await supabase
-            .from("payout_requests")
-            .update({ status: "Approved", approved_by: user?.id || null, approved_at: nowIso() })
-            .eq("id", id);
-          if (payoutError) handleWriteError(payoutError);
-          if (payout?.commissionIds.length) {
-            const { error: commissionError } = await supabase
-              .from("commissions")
-              .update({ state: "Approved" })
-              .in("id", payout.commissionIds);
-            if (commissionError) handleWriteError(commissionError);
-          }
-          if (payout) {
-            await notifyPartner(payout.partnerId, {
-              title: "Payout approved",
-              body: `${id} ready for payment`,
-              type: "success",
-              mandatory: true,
-            });
-          }
-          reloadAfterWrite();
-        })();
+        void (supabase as any)
+          .rpc("review_payout_request", {
+            target_payout: id,
+            approve_request: true,
+            rejection_reason: null,
+          })
+          .then(({ error }: { error: unknown }) => {
+            if (error) handleWriteError(error);
+            reloadAfterWrite();
+          });
       }
     },
     [handleWriteError, notifyPartner, payouts, realMode, reloadAfterWrite, user?.id],
@@ -1828,6 +1797,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const rejectPayout: AppActions["rejectPayout"] = useCallback(
     (id, reason, actor) => {
+      if (!reason.trim()) {
+        toast.error("A rejection reason is required.");
+        return;
+      }
       setPayouts((prev) =>
         prev.map((p) => {
           if (p.id !== id) return p;
@@ -1850,28 +1823,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }),
       );
       if (realMode && supabase) {
-        const payout = payouts.find((p) => p.id === id);
-        void (async () => {
-          const { error: payoutError } = await supabase
-            .from("payout_requests")
-            .update({ status: "Rejected", reject_reason: reason })
-            .eq("id", id);
-          if (payoutError) handleWriteError(payoutError);
-          if (payout?.commissionIds.length) {
-            const { error: commissionError } = await supabase
-              .from("commissions")
-              .update({ state: "Unpaid" })
-              .in("id", payout.commissionIds);
-            if (commissionError) handleWriteError(commissionError);
-            await notifyPartner(payout.partnerId, {
-              title: "Payout rejected",
-              body: `${id}: ${reason}`,
-              type: "destructive",
-              mandatory: true,
-            });
-          }
-          reloadAfterWrite();
-        })();
+        void (supabase as any)
+          .rpc("review_payout_request", {
+            target_payout: id,
+            approve_request: false,
+            rejection_reason: reason.trim(),
+          })
+          .then(({ error }: { error: unknown }) => {
+            if (error) handleWriteError(error);
+            reloadAfterWrite();
+          });
       }
     },
     [handleWriteError, notifyPartner, payouts, realMode, reloadAfterWrite],
@@ -1879,6 +1840,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const recordPayoutPayment: AppActions["recordPayoutPayment"] = useCallback(
     (id, payload, actor) => {
+      if (!payload.date || !payload.method.trim() || !payload.reference.trim()) {
+        toast.error("Payment date, method, and transaction reference are required.");
+        return;
+      }
       setPayouts((prev) =>
         prev.map((p) => {
           if (p.id !== id) return p;
@@ -1933,25 +1898,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const recordClientPayment: AppActions["recordClientPayment"] = useCallback(
     (payload, actor) => {
-      const triggerEligibility = true;
       const released = commissions.filter(
-        (c) => c.leadId === payload.leadId && c.state === "On Hold",
+        (commission) => commission.leadId === payload.leadId && commission.state !== "Waived",
       );
       setClientPayments((prev) => [{ ...payload, id: uid("CP") }, ...prev]);
       if (released.length > 0) {
         setCommissions((prev) =>
-          prev.map((c) =>
-            c.leadId === payload.leadId && c.state === "On Hold"
-              ? {
-                  ...c,
-                  state: "Unpaid",
-                  eligibleAmount: Math.min(
-                    c.amount,
-                    (c.eligibleAmount || 0) + payload.amount * (c.rate / 100),
-                  ),
-                }
-              : c,
-          ),
+          prev.map((commission) => {
+            if (!released.some((item) => item.id === commission.id)) return commission;
+            const eligibleAmount = commission.eligibleAmount || 0;
+            const releaseAmount =
+              payload.paymentType === "Final"
+                ? commission.amount - eligibleAmount
+                : Math.min(
+                    commission.amount - eligibleAmount,
+                    payload.amount * (commission.rate / 100),
+                  );
+            const nextEligibleAmount = Math.min(commission.amount, eligibleAmount + releaseAmount);
+            return {
+              ...commission,
+              state: ["Payout Requested", "Approved", "Disputed"].includes(commission.state)
+                ? commission.state
+                : (commission.paidAmount || 0) >= nextEligibleAmount
+                  ? "Paid"
+                  : "Unpaid",
+              eligibleAmount: nextEligibleAmount,
+            };
+          }),
         );
       }
       pushAudit({

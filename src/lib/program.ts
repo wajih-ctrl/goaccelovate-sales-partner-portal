@@ -41,6 +41,23 @@ export const ADMIN_CONTROLLED_STAGES: LeadStage[] = [
   "Closed Won",
 ];
 
+export const ADVANCE_PAYMENT_STAGES: LeadStage[] = [
+  "Advance Confirmed",
+  "Sent to Product",
+  "Done by Product",
+  "Client Review",
+  "Under Revisions",
+  "Final Payment Clearance",
+  "Final Handoff",
+  "Closed Won",
+];
+
+export const FINAL_PAYMENT_STAGES: LeadStage[] = [
+  "Final Payment Clearance",
+  "Final Handoff",
+  "Closed Won",
+];
+
 export const COUNTRIES = [
   "Afghanistan",
   "Albania",
@@ -283,15 +300,40 @@ export function canMoveLeadStage(
 ) {
   if (currentStage === "On Hold") {
     if (!previousStage || targetStage !== previousStage) return false;
-    return role !== "partner" || PARTNER_CONTROLLED_STAGES.includes(previousStage);
+    if (role === "admin" || role === "super_admin") return true;
+    return role === "partner" && PARTNER_CONTROLLED_STAGES.includes(previousStage);
   }
-  if (role !== "partner") return true;
+  if (role === "admin" || role === "super_admin") return true;
+  if (role !== "partner") return false;
   if (currentStage === "Closed Won" || currentStage === "Closed Lost") return false;
   if (targetStage === "Closed Lost" || targetStage === "On Hold") return true;
   if (ADMIN_CONTROLLED_STAGES.includes(currentStage)) return false;
   return PARTNER_CONTROLLED_STAGES.includes(targetStage);
 }
 
-export function isCommercialStage(stage: LeadStage) {
-  return ADMIN_CONTROLLED_STAGES.includes(stage) || stage === "Closed Won";
+export function allowedLeadStageTargets(
+  role: Role,
+  currentStage: LeadStage,
+  previousStage?: LeadStage,
+) {
+  return LEAD_STAGES.filter(
+    (targetStage) =>
+      targetStage === currentStage ||
+      canMoveLeadStage(role, currentStage, targetStage, previousStage),
+  );
+}
+
+export function isCommercialStage(stage: LeadStage, previousStage?: LeadStage) {
+  return (
+    ADMIN_CONTROLLED_STAGES.includes(stage) ||
+    stage === "Closed Won" ||
+    (stage === "On Hold" &&
+      Boolean(previousStage && ADMIN_CONTROLLED_STAGES.includes(previousStage)))
+  );
+}
+
+export function canRecordClientPayment(paymentType: "Advance" | "Final", stage: LeadStage) {
+  return (paymentType === "Advance" ? ADVANCE_PAYMENT_STAGES : FINAL_PAYMENT_STAGES).includes(
+    stage,
+  );
 }
