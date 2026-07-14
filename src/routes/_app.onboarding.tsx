@@ -1,7 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Agreement tables are introduced by the pending migration. */
 import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Circle, FileSignature, FileText } from "lucide-react";
+import {
+  CheckCircle2,
+  Circle,
+  FileSignature,
+  FileText,
+  Handshake,
+  LifeBuoy,
+  Rocket,
+  ShieldCheck,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader, PageContainer } from "@/components/layout/AppShell";
@@ -31,6 +40,8 @@ function Onboarding() {
   const [legalName, setLegalName] = useState(user?.name || "");
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [welcomeAcknowledged, setWelcomeAcknowledged] = useState(false);
+  const [welcomeLoading, setWelcomeLoading] = useState(false);
 
   useEffect(() => {
     if (!supabase || user?.role !== "partner") {
@@ -57,8 +68,17 @@ function Onboarding() {
       );
   }, [user?.role]);
 
+  useEffect(() => {
+    if (user?.partnerId && onboarding[user.partnerId]?.welcome) {
+      setWelcomeAcknowledged(true);
+    }
+  }, [onboarding, user?.partnerId]);
+
   if (user?.role !== "partner") return <Navigate to="/access-denied" />;
-  const status = onboarding[user.partnerId!] || {};
+  const status: Record<string, boolean> = {
+    ...(onboarding[user.partnerId!] || {}),
+    welcome: Boolean(welcomeAcknowledged || onboarding[user.partnerId!]?.welcome),
+  };
   const done = ONBOARDING_STEPS.filter((step) => status[step.key]).length;
   const pct = Math.round((done / ONBOARDING_STEPS.length) * 100);
   const documentsReady =
@@ -69,8 +89,18 @@ function Onboarding() {
     const result = await signRequiredAgreements(legalName.trim());
     setLoading(false);
     if (result.error) return toast.error(result.error);
-    toast.success("Agreement and NDA signed successfully.");
+    toast.success("Agreements signed. Your portal access is now active.");
     navigate({ to: "/dashboard", replace: true });
+  };
+
+  const acknowledgeWelcomeKit = async () => {
+    if (!supabase) return toast.error("Supabase is not configured.");
+    setWelcomeLoading(true);
+    const { error } = await (supabase as any).rpc("acknowledge_partner_welcome_kit");
+    setWelcomeLoading(false);
+    if (error) return toast.error(error.message);
+    setWelcomeAcknowledged(true);
+    toast.success("Welcome kit acknowledged. Your onboarding progress has been updated.");
   };
 
   return (
@@ -205,6 +235,82 @@ function Onboarding() {
                 );
               })}
             </ul>
+            <section className="border-t pt-5" aria-labelledby="welcome-kit-title">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="max-w-2xl">
+                  <div className="mb-4 flex items-center gap-3">
+                    <img
+                      src="/goaccelovate-logo.png"
+                      alt="GoAccelovate"
+                      className="h-10 w-auto object-contain"
+                    />
+                    <div>
+                      <h3 id="welcome-kit-title" className="font-semibold">
+                        Global Partner Program Welcome Kit
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Your starting point for representing GoAccelovate with confidence.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="flex gap-3 rounded-md border p-3">
+                      <Handshake className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
+                      <div>
+                        <div className="text-sm font-medium">Partner approach</div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Introduce qualified opportunities transparently and keep relationship
+                          context current.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 rounded-md border p-3">
+                      <Rocket className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
+                      <div>
+                        <div className="text-sm font-medium">Getting started</div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Complete your profile, submit your first qualified lead, and follow its
+                          progress from My Leads.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 rounded-md border p-3">
+                      <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
+                      <div>
+                        <div className="text-sm font-medium">Data care</div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Share only authorized business information and protect confidential client
+                          material.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 rounded-md border p-3">
+                      <LifeBuoy className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
+                      <div>
+                        <div className="text-sm font-medium">Program support</div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Contact your assigned GoAccelovate account manager whenever an opportunity
+                          needs operational support.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="shrink-0 lg:pt-14">
+                  {status.welcome ? (
+                    <div className="flex items-center gap-2 text-sm font-medium text-success">
+                      <CheckCircle2 className="h-5 w-5" />
+                      Welcome kit acknowledged
+                    </div>
+                  ) : (
+                    <Button onClick={acknowledgeWelcomeKit} disabled={welcomeLoading}>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      {welcomeLoading ? "Saving..." : "Acknowledge welcome kit"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </section>
             {documentsReady && (
               <div className="border-t pt-5">
                 <h3 className="mb-3 text-sm font-semibold">Signed documents</h3>

@@ -19,8 +19,11 @@ New Sales Partners cannot enter the operating portal until they sign the current
 1. Super Admin publishes secure PDF URLs in Settings.
 2. The invitation recipient sets a password and opens onboarding.
 3. The partner reads both documents, enters their legal name, confirms the e-signature, and signs.
-4. The portal records the user, partner, document version, signer name, and timestamp.
-5. Publishing a new document version requires affected partners to sign again.
+4. The portal records the user, partner, document version, signer name, and timestamp, then automatically completes the Agreement and NDA onboarding steps and opens portal access.
+5. The partner reviews and acknowledges the GoAccelovate Welcome Kit in Onboarding. The acknowledgement is stored and audited.
+6. Publishing a new document version requires affected partners to sign again and automatically reopens the two legal onboarding steps.
+
+The profile onboarding step is also automatic. It completes when the partner has supplied their name, phone, country, city, and professional bio. Country and city use searchable global lists; email remains managed by the authenticated account.
 
 Do not invite production partners before final Agreement and NDA PDFs are published.
 
@@ -94,7 +97,7 @@ Supabase Storage buckets are private. Metadata is created only after a successfu
 
 Suspended and deactivated accounts are rejected by the portal after authentication. Super Admin lifecycle changes create audit entries and mandatory in-app notifications. Sign-out always clears the session and returns to login.
 
-Supabase Auth sends invitation and password-reset emails. General announcement and event emails require a configured server-side provider such as Resend or SMTP; in-app notifications remain the authoritative delivery channel until that provider is configured and tested.
+Supabase Auth sends invitation and password-reset emails. Branded GoAccelovate templates are stored in `supabase/templates`, with a clear purpose, action button, security guidance, logo header, and website footer. Hosted Supabase projects require custom SMTP or a plan that permits auth-template customization before those designs can be activated. General announcement and event emails also require a configured server-side provider such as Resend or SMTP; in-app notifications remain the authoritative delivery channel until that provider is configured and tested.
 
 ## Production Configuration
 
