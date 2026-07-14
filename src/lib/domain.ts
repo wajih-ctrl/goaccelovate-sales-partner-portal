@@ -49,7 +49,7 @@ export interface Partner {
   bio: string;
   tier: Tier;
   commissionRate: number;
-  status: "Active" | "Suspended" | "Pending";
+  status: "Active" | "Suspended" | "Pending" | "Deactivated";
   assignedContact: string;
   joinedDate: string;
 }

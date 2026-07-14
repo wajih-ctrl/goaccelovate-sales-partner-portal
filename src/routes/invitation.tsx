@@ -16,7 +16,7 @@ function Invitation() {
   const { acceptInvitation } = useAuth();
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
-  const [acceptedTerms, setAcceptedTerms] = useState(true);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const mode = useMemo(() => {
@@ -106,7 +106,8 @@ function Invitation() {
               checked={acceptedTerms}
               onChange={(event) => setAcceptedTerms(event.target.checked)}
             />
-            I accept the GoAccelovate Partner Agreement and Compliance Addendum.
+            I understand that I must review and electronically sign the Partner Agreement and NDA on
+            the next step before accessing program data.
           </label>
           <Button className="w-full" type="submit" disabled={loading}>
             <CheckCircle2 className="mr-2 h-4 w-4" />

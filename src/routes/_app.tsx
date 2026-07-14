@@ -16,7 +16,8 @@ function AppLayout() {
     user.role === "partner" &&
     user.agreementsComplete === false &&
     pathname !== "/onboarding" &&
-    pathname !== "/profile"
+    pathname !== "/profile" &&
+    !pathname.startsWith("/legal/")
   )
     return <Navigate to="/onboarding" replace />;
   if (!isPathAllowedForRole(user.role, pathname)) return <Navigate to="/access-denied" replace />;

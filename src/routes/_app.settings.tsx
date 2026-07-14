@@ -1,15 +1,13 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- Agreement publishing is introduced by the pending migration. */
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { PageHeader, PageContainer } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useStore, type Settings as StoreSettings } from "@/lib/store";
 import { toast } from "sonner";
-import { Save } from "lucide-react";
+import { FileText, Save } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
 import { FormDialog } from "@/components/common/dialogs";
-import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/_app/settings")({ component: Settings });
 
@@ -41,10 +39,6 @@ function Settings() {
   const { settings, updateSettings } = useStore();
   const [form, setForm] = useState(() => toForm(settings));
   const [pendingPatch, setPendingPatch] = useState<Partial<typeof settings> | null>(null);
-  const [agreementUrl, setAgreementUrl] = useState("");
-  const [ndaUrl, setNdaUrl] = useState("");
-  const [publishAgreementsOpen, setPublishAgreementsOpen] = useState(false);
-  const [publishingAgreements, setPublishingAgreements] = useState(false);
   useEffect(() => {
     setForm(toForm(settings));
   }, [settings]);
@@ -190,34 +184,24 @@ function Settings() {
             Required Agreement Documents
           </h3>
           <p className="mb-3 text-xs text-muted-foreground">
-            Publish secure PDF URLs for the Partner Agreement and NDA. Publishing creates new
-            versions and requires affected Sales Partners to sign the current versions.
+            The approved Partner Agreement and NDA templates are published inside the portal. Each
+            document automatically uses the Sales Partner's name, effective date, and commission
+            rate and can be printed or saved as PDF.
           </p>
-          <Row label="Partner Agreement PDF URL">
-            <input
-              type="url"
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              placeholder="https://.../partner-agreement.pdf"
-              value={agreementUrl}
-              onChange={(event) => setAgreementUrl(event.target.value)}
-            />
-          </Row>
-          <Row label="NDA PDF URL">
-            <input
-              type="url"
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              placeholder="https://.../nda.pdf"
-              value={ndaUrl}
-              onChange={(event) => setNdaUrl(event.target.value)}
-            />
-          </Row>
-          <Button
-            variant="outline"
-            disabled={!agreementUrl.startsWith("https://") || !ndaUrl.startsWith("https://")}
-            onClick={() => setPublishAgreementsOpen(true)}
-          >
-            Publish new document versions
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link to="/legal/$type" params={{ type: "agreement" }}>
+                <FileText className="mr-2 h-4 w-4" />
+                Preview Agreement
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/legal/$type" params={{ type: "nda" }}>
+                <FileText className="mr-2 h-4 w-4" />
+                Preview NDA
+              </Link>
+            </Button>
+          </div>
         </Card>
 
         <Card className="p-5">
@@ -273,37 +257,6 @@ function Settings() {
                 </div>
               ))}
         </div>
-      </FormDialog>
-
-      <FormDialog
-        open={publishAgreementsOpen}
-        onOpenChange={setPublishAgreementsOpen}
-        title="Publish Agreement and NDA"
-        submitLabel={publishingAgreements ? "Publishing..." : "Publish versions"}
-        canSubmit={
-          !publishingAgreements &&
-          agreementUrl.startsWith("https://") &&
-          ndaUrl.startsWith("https://")
-        }
-        onSubmit={async () => {
-          if (!supabase) return toast.error("Supabase is not configured.");
-          setPublishingAgreements(true);
-          const { error } = await (supabase as any).rpc("publish_required_agreements", {
-            agreement_url: agreementUrl,
-            nda_url: ndaUrl,
-          });
-          setPublishingAgreements(false);
-          if (error) return toast.error(error.message);
-          toast.success("New Agreement and NDA versions published.");
-          setPublishAgreementsOpen(false);
-          setAgreementUrl("");
-          setNdaUrl("");
-        }}
-      >
-        <p className="text-sm text-muted-foreground">
-          Existing acceptance records remain in version history. Sales Partners required to use
-          agreements will be gated until they sign these new active versions.
-        </p>
       </FormDialog>
     </>
   );

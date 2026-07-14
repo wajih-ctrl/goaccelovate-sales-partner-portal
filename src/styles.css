@@ -210,3 +210,33 @@
 @utility bg-gradient-brand {
   background-image: var(--gradient-brand);
 }
+
+@media print {
+  @page {
+    margin: 16mm;
+  }
+  body {
+    overflow: visible !important;
+    background: white !important;
+  }
+  aside,
+  .legal-screen-only,
+  body:has(.legal-document) header:not(.legal-document-header) {
+    display: none !important;
+  }
+  body:has(.legal-document) main,
+  body:has(.legal-document) main > div {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  .legal-document {
+    max-width: none !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+  .legal-document section,
+  .legal-document-header,
+  .legal-document-footer {
+    break-inside: avoid;
+  }
+}

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Agreement tables are introduced by the pending migration. */
-import { createFileRoute, Navigate, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Circle, ExternalLink, FileSignature } from "lucide-react";
+import { CheckCircle2, Circle, FileSignature, FileText } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader, PageContainer } from "@/components/layout/AppShell";
@@ -27,6 +27,7 @@ function Onboarding() {
   const { onboarding } = useStore();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<AgreementDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(user?.agreementsComplete === false);
   const [legalName, setLegalName] = useState(user?.name || "");
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -48,6 +49,7 @@ function Onboarding() {
         }) => {
           if (error) toast.error(error.message);
           else setDocuments(data || []);
+          setDocumentsLoading(false);
         },
       );
   }, [user?.agreementsComplete]);
@@ -88,14 +90,17 @@ function Onboarding() {
               </div>
             </div>
 
-            {documentsReady ? (
+            {documentsLoading ? (
+              <div className="rounded-md border p-4 text-sm text-muted-foreground">
+                Loading the current Agreement and NDA...
+              </div>
+            ) : documentsReady ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 {documents.map((document) => (
-                  <a
+                  <Link
                     key={document.id}
-                    href={document.content_url!}
-                    target="_blank"
-                    rel="noreferrer"
+                    to="/legal/$type"
+                    params={{ type: document.document_type === "Agreement" ? "agreement" : "nda" }}
                     className="flex items-center justify-between rounded-md border p-3 text-sm hover:bg-accent/30"
                   >
                     <span>
@@ -104,8 +109,8 @@ function Onboarding() {
                         {document.document_type} version {document.version}
                       </span>
                     </span>
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
+                    <FileText className="h-4 w-4" />
+                  </Link>
                 ))}
               </div>
             ) : (

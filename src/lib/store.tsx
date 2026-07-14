@@ -9,6 +9,7 @@ import { isAnnouncementTargeted } from "./announcements";
 import { INDUSTRIES, LEAD_STAGES } from "./program";
 import {
   ONBOARDING_STEPS,
+  fmtCurrency,
   type Partner,
   type Lead,
   type LeadStage,
@@ -222,23 +223,114 @@ const EMPTY_ATTACHMENTS: Record<string, StoredAttachment[]> = {};
 const EMPTY_PARTNER_DOCS: Record<string, PartnerDocument[]> = {};
 
 const asPartnerStatus = (status: string): Partner["status"] => {
+  if (status === "deactivated") return "Deactivated";
   if (status === "suspended") return "Suspended";
   if (status === "pending") return "Pending";
   return "Active";
 };
 
 const toDbPartnerStatus = (status?: Partner["status"]) => {
+  if (status === "Deactivated") return "deactivated";
   if (status === "Suspended") return "suspended";
   if (status === "Pending") return "pending";
   if (status === "Active") return "active";
   return undefined;
 };
 
+type DisplayContext = {
+  labels: Map<string, string>;
+  payouts: Map<string, { label: string; amount: number }>;
+};
+
+const internalAuditKeys = new Set([
+  "id",
+  "actor_id",
+  "created_at",
+  "updated_at",
+  "user_agent",
+  "ip_address",
+]);
+
+const humanizeText = (value: string, context: DisplayContext) => {
+  let result = value;
+  for (const [id, label] of context.labels) result = result.replaceAll(id, label);
+  return result
+    .replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi,
+      "the related record",
+    )
+    .replace(/\s*[·:]\s*$/g, "")
+    .trim();
+};
+
+const labelKey = (key: string) =>
+  key.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const formatAuditValue = (value: unknown, context: DisplayContext): string | undefined => {
+  if (value == null) return undefined;
+  if (typeof value === "string") return humanizeText(value, context);
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => formatAuditValue(item, context))
+      .filter(Boolean)
+      .join(", ");
+  }
+  if (typeof value === "object") {
+    const object = value as Record<string, unknown>;
+    if (Object.keys(object).length === 1 && "value" in object) {
+      return formatAuditValue(object.value, context);
+    }
+    return Object.entries(object)
+      .filter(([key]) => !internalAuditKeys.has(key))
+      .slice(0, 10)
+      .map(([key, item]) => `${labelKey(key)}: ${formatAuditValue(item, context) || "None"}`)
+      .join("; ");
+  }
+  return String(value);
+};
+
 const stringifyValue = (value: unknown) => {
   if (value == null) return undefined;
-  if (typeof value === "string") return value;
-  return JSON.stringify(value);
+  return typeof value === "string" ? value : JSON.stringify(value);
 };
+
+function buildDisplayContext(data: {
+  profiles: any[];
+  partners: any[];
+  leads: any[];
+  commissions: any[];
+  payouts: any[];
+  calls: any[];
+  payments: any[];
+  invitations: any[];
+}): DisplayContext {
+  const labels = new Map<string, string>();
+  data.profiles.forEach((row) => labels.set(row.id, row.full_name || row.email || "Portal user"));
+  data.partners.forEach((row) => labels.set(row.id, row.name || row.email || "Sales Partner"));
+  data.leads.forEach((row) => labels.set(row.id, row.company_name || row.public_id || "Lead"));
+  data.invitations.forEach((row) => labels.set(row.id, row.email || "Pending invitation"));
+  data.calls.forEach((row) => {
+    const lead = labels.get(row.lead_id) || "lead";
+    labels.set(row.id, `Discovery call for ${lead}`);
+  });
+  data.payments.forEach((row) => {
+    const lead = labels.get(row.lead_id) || "lead";
+    labels.set(row.id, `Client payment for ${lead}`);
+  });
+  data.commissions.forEach((row) => {
+    const lead = labels.get(row.lead_id) || "lead";
+    labels.set(row.id, `Commission for ${lead}`);
+  });
+  const payouts = new Map<string, { label: string; amount: number }>();
+  data.payouts.forEach((row) => {
+    const partner = labels.get(row.partner_id) || "Sales Partner";
+    const label = `Payout request for ${partner}`;
+    labels.set(row.id, label);
+    payouts.set(row.id, { label, amount: Number(row.amount || 0) });
+  });
+  return { labels, payouts };
+}
 
 const publicId = (prefix: string) => `${prefix}-${Math.floor(Math.random() * 90000 + 10000)}`;
 
@@ -410,11 +502,24 @@ function mapActivity(row: any): ActivityEntry {
   };
 }
 
-function mapNotification(row: any): Notification {
+function mapNotification(row: any, context: DisplayContext): Notification {
+  const payout = [...context.payouts.entries()].find(([id]) => String(row.body || "").includes(id));
+  let body = humanizeText(String(row.body || ""), context);
+  if (payout && row.title === "Payout request submitted") {
+    body = `${payout[1].label} totaling ${fmtCurrency(payout[1].amount)}.`;
+  } else if (/^[0-9a-f-]{30,}$/i.test(body)) {
+    const fallback: Record<string, string> = {
+      "Invitation revoked": "The pending invitation was revoked.",
+      "Account suspended": "The selected portal account was suspended.",
+      "Account reactivated": "The selected portal account was reinstated.",
+      "Account deleted": "The selected portal account was deleted.",
+    };
+    body = fallback[row.title] || "This portal record was updated.";
+  }
   return {
     id: row.id,
     title: row.title,
-    body: row.body,
+    body,
     date: row.created_at,
     read: Boolean(row.read_at),
     type: row.type,
@@ -434,17 +539,23 @@ function mapAnnouncement(row: any, reads: any[]): Announcement {
   };
 }
 
-function mapAudit(row: any): AuditEntry {
+function mapAudit(row: any, context: DisplayContext): AuditEntry {
+  const rawDetail = row.record_name || row.record_id || `${row.action} in ${row.module}`;
   return {
     id: row.id,
     user: row.actor_name,
     action: row.action,
     module: row.module,
     date: row.created_at,
-    details: row.record_name || row.record_id || "",
-    oldValue: stringifyValue(row.old_value),
-    newValue: stringifyValue(row.new_value),
+    details: humanizeText(String(rawDetail), context),
+    oldValue: formatAuditValue(row.old_value, context),
+    newValue: formatAuditValue(row.new_value, context),
   };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function mapStandaloneAudit(row: any): AuditEntry {
+  return mapAudit(row, { labels: new Map(), payouts: new Map() });
 }
 
 function mapSettings(rows: any[]): Settings {
@@ -602,7 +713,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       supabase
         .from("profiles")
         .select("id,email,full_name,role,account_status,partner_id,avatar_url"),
-      supabase.from("invitations").select("*").order("created_at", { ascending: false }),
+      supabase
+        .from("invitations")
+        .select("*")
+        .is("accepted_at", null)
+        .is("revoked_at", null)
+        .gt("expires_at", nowIso())
+        .order("created_at", { ascending: false }),
     ]);
 
     const responses = [
@@ -630,6 +747,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     const payoutItems = payoutItemsRes.data || [];
     const reads = announcementReadsRes.data || [];
+    const displayContext = buildDisplayContext({
+      profiles: profilesRes.data || [],
+      partners: partnersRes.data || [],
+      leads: leadsRes.data || [],
+      commissions: commissionsRes.data || [],
+      payouts: payoutRequestsRes.data || [],
+      calls: callsRes.data || [],
+      payments: clientPaymentsRes.data || [],
+      invitations: invitationsRes.data || [],
+    });
 
     setPartners((partnersRes.data || []).map(mapPartner));
     setLeads((leadsRes.data || []).map(mapLead));
@@ -639,8 +766,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCalls((callsRes.data || []).map(mapCall));
     setActivity((activityRes.data || []).map(mapActivity));
     setAnnouncements((announcementsRes.data || []).map((row) => mapAnnouncement(row, reads)));
-    setNotifications((notificationsRes.data || []).map(mapNotification));
-    setAudit((auditRes.data || []).map(mapAudit));
+    setNotifications(
+      (notificationsRes.data || []).map((row) => mapNotification(row, displayContext)),
+    );
+    setAudit((auditRes.data || []).map((row) => mapAudit(row, displayContext)));
     setOnboarding(groupOnboarding(onboardingRes.data || []));
     setAttachments(groupAttachments(attachmentsRes.data || []));
     setPartnerDocuments(groupPartnerDocuments(documentsRes.data || []));
@@ -656,10 +785,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         avatar: profile.avatar_url || undefined,
       })),
     );
+    const profilesByEmail = new Map(
+      (profilesRes.data || []).map((profile: any) => [
+        String(profile.email).toLowerCase(),
+        profile,
+      ]),
+    );
     setInvites(
       (invitationsRes.data || []).map((invitation: any) => ({
         id: invitation.id,
-        name: invitation.email,
+        name:
+          profilesByEmail.get(String(invitation.email).toLowerCase())?.full_name ||
+          invitation.email,
         email: invitation.email,
         role: invitation.role,
         commissionRate:
@@ -2011,21 +2148,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const revokeInvitation: AppActions["revokeInvitation"] = useCallback((id, actor) => {
-    setInvites((prev) => prev.filter((i) => i.id !== id));
-    pushAudit({ user: actor, action: "Invitation Revoked", module: "Users", details: id });
-    notify({ title: "Invitation revoked", body: id, type: "warning", mandatory: true });
-  }, []);
+  const revokeInvitation: AppActions["revokeInvitation"] = useCallback(
+    (id, actor) => {
+      const invitation = invites.find((item) => item.id === id);
+      const label = invitation?.email || "Pending invitation";
+      setInvites((prev) => prev.filter((item) => item.id !== id));
+      pushAudit({ user: actor, action: "Invitation Revoked", module: "Users", details: label });
+      notify({
+        title: "Invitation revoked",
+        body: `${label} can no longer use the invitation link.`,
+        type: "warning",
+        mandatory: true,
+      });
+    },
+    [invites],
+  );
 
   const suspendUser: AppActions["suspendUser"] = useCallback(
     (id, actor) => {
       const targetPartner = partners.some((p) => p.id === id);
+      const targetName =
+        partners.find((partner) => partner.id === id)?.name ||
+        staffUsers.find((staff) => staff.id === id)?.name ||
+        "Portal user";
       setPartners((prev) => prev.map((p) => (p.id === id ? { ...p, status: "Suspended" } : p)));
       setStaffUsers((prev) =>
         prev.map((u) => (u.id === id ? { ...u, accountStatus: "suspended" } : u)),
       );
-      pushAudit({ user: actor, action: "Account Suspended", module: "Users", details: id });
-      notify({ title: "Account suspended", body: id, type: "warning", mandatory: true });
+      pushAudit({ user: actor, action: "Account Suspended", module: "Users", details: targetName });
+      notify({
+        title: "Account suspended",
+        body: `${targetName}'s portal access was suspended.`,
+        type: "warning",
+        mandatory: true,
+      });
       if (realMode && supabase) {
         void (async () => {
           const { error: profileError } = await supabase
@@ -2050,18 +2206,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })();
       }
     },
-    [handleWriteError, partners, realMode, reloadAfterWrite],
+    [handleWriteError, partners, realMode, reloadAfterWrite, staffUsers],
   );
 
   const reactivateUser: AppActions["reactivateUser"] = useCallback(
     (id, actor) => {
       const targetPartner = partners.some((p) => p.id === id);
+      const targetName =
+        partners.find((partner) => partner.id === id)?.name ||
+        staffUsers.find((staff) => staff.id === id)?.name ||
+        "Portal user";
       setPartners((prev) => prev.map((p) => (p.id === id ? { ...p, status: "Active" } : p)));
       setStaffUsers((prev) =>
         prev.map((u) => (u.id === id ? { ...u, accountStatus: "active" } : u)),
       );
-      pushAudit({ user: actor, action: "Account Reactivated", module: "Users", details: id });
-      notify({ title: "Account reactivated", body: id, type: "success", mandatory: true });
+      pushAudit({
+        user: actor,
+        action: "Account Reactivated",
+        module: "Users",
+        details: targetName,
+      });
+      notify({
+        title: "Account reactivated",
+        body: `${targetName}'s portal access was reinstated.`,
+        type: "success",
+        mandatory: true,
+      });
       if (realMode && supabase) {
         void (async () => {
           const { error: profileError } = await supabase
@@ -2086,34 +2256,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })();
       }
     },
-    [handleWriteError, partners, realMode, reloadAfterWrite],
+    [handleWriteError, partners, realMode, reloadAfterWrite, staffUsers],
   );
 
-  const deleteUser: AppActions["deleteUser"] = useCallback(
-    (id, actor) => {
-      setPartners((prev) => prev.filter((p) => p.id !== id));
-      setInvites((prev) => prev.filter((i) => i.id !== id));
-      setStaffUsers((prev) => prev.filter((u) => u.id !== id));
-      pushAudit({ user: actor, action: "Account Deleted", module: "Users", details: id });
-      notify({ title: "Account deleted", body: id, type: "destructive" });
-      if (realMode && supabase) {
-        void (async () => {
-          const { error: profileError } = await supabase
-            .from("profiles")
-            .update({ account_status: "deactivated" })
-            .or(`id.eq.${id},partner_id.eq.${id}`);
-          const { error: partnerError } = await supabase
-            .from("partner_profiles")
-            .update({ status: "deactivated" })
-            .eq("id", id);
-          if (profileError) handleWriteError(profileError);
-          if (partnerError) handleWriteError(partnerError);
-          reloadAfterWrite();
-        })();
-      }
-    },
-    [handleWriteError, realMode, reloadAfterWrite],
-  );
+  const deleteUser: AppActions["deleteUser"] = useCallback((id, actor) => {
+    setPartners((prev) => prev.filter((p) => p.id !== id));
+    setInvites((prev) => prev.filter((i) => i.id !== id));
+    setStaffUsers((prev) => prev.filter((u) => u.id !== id));
+    void actor;
+  }, []);
 
   const changeUserRole: AppActions["changeUserRole"] = useCallback(
     (id, role, actor) => {
@@ -2227,7 +2378,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           tier?: Tier;
           commission_rate?: number;
           assigned_contact?: string;
-          status?: "active" | "suspended" | "pending";
+          status?: "active" | "suspended" | "pending" | "deactivated";
         } = {};
         if (patch.name !== undefined) dbPatch.name = patch.name;
         if (patch.phone !== undefined) dbPatch.phone = patch.phone;

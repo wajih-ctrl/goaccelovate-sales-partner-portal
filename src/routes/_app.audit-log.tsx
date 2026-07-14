@@ -3,27 +3,59 @@ import { PageHeader, PageContainer } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
-import { useStore } from "@/lib/store";
+import { mapStandaloneAudit, useStore } from "@/lib/store";
+import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import { Download, Search } from "lucide-react";
-import { useState, useMemo } from "react";
+import { Download, Eye, Search } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import type { AuditEntry } from "@/lib/domain";
 
 export const Route = createFileRoute("/_app/audit-log")({ component: AuditLog });
 
 function AuditLog() {
   const { user } = useAuth();
   const { audit } = useStore();
+  const [remoteAudit, setRemoteAudit] = useState<AuditEntry[] | null>(null);
   const [moduleF, setModule] = useState("All");
   const [q, setQ] = useState("");
   const [userF, setUserF] = useState("All");
   const [actionF, setActionF] = useState("All");
   const [dateF, setDateF] = useState("");
-  const modules = ["All", ...Array.from(new Set(audit.map((a) => a.module)))];
-  const users = ["All", ...Array.from(new Set(audit.map((a) => a.user)))];
-  const actions = ["All", ...Array.from(new Set(audit.map((a) => a.action)))];
+  const [selectedEntry, setSelectedEntry] = useState<AuditEntry | null>(null);
+  const sourceAudit = remoteAudit ?? audit;
+  const modules = ["All", ...Array.from(new Set(sourceAudit.map((a) => a.module)))];
+  const users = ["All", ...Array.from(new Set(sourceAudit.map((a) => a.user)))];
+  const actions = ["All", ...Array.from(new Set(sourceAudit.map((a) => a.action)))];
+
+  useEffect(() => {
+    if (user?.role !== "super_admin" || !supabase) return;
+    let cancelled = false;
+    void supabase
+      .from("audit_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          toast.error("Unable to load the audit log.");
+          return;
+        }
+        setRemoteAudit((data || []).map(mapStandaloneAudit));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.role]);
 
   const list = useMemo(() => {
-    let l = audit;
+    let l = sourceAudit;
     if (moduleF !== "All") l = l.filter((a) => a.module === moduleF);
     if (userF !== "All") l = l.filter((a) => a.user === userF);
     if (actionF !== "All") l = l.filter((a) => a.action === actionF);
@@ -31,7 +63,7 @@ function AuditLog() {
     if (q)
       l = l.filter((a) => (a.details + " " + a.action).toLowerCase().includes(q.toLowerCase()));
     return l;
-  }, [audit, moduleF, userF, actionF, dateF, q]);
+  }, [sourceAudit, moduleF, userF, actionF, dateF, q]);
 
   const exportCsv = () => {
     const rows = [["When", "User", "Module", "Action", "Details", "Old", "New"]];
@@ -140,6 +172,7 @@ function AuditLog() {
                   <th className="px-4 py-3 text-left">Action</th>
                   <th className="px-4 py-3 text-left">Details</th>
                   <th className="px-4 py-3 text-left">Change</th>
+                  <th className="px-4 py-3 text-right">Details</th>
                 </tr>
               </thead>
               <tbody>
@@ -151,8 +184,10 @@ function AuditLog() {
                     <td className="px-4 py-3">{a.user}</td>
                     <td className="px-4 py-3">{a.module}</td>
                     <td className="px-4 py-3 font-medium">{a.action}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{a.details}</td>
-                    <td className="px-4 py-3 text-xs">
+                    <td className="max-w-80 whitespace-normal px-4 py-3 text-muted-foreground">
+                      {a.details}
+                    </td>
+                    <td className="max-w-96 whitespace-normal px-4 py-3 text-xs">
                       {a.oldValue ? (
                         <span className="text-muted-foreground">
                           {a.oldValue} → <span className="text-foreground">{a.newValue}</span>
@@ -161,11 +196,17 @@ function AuditLog() {
                         "—"
                       )}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedEntry(a)}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        View
+                      </Button>
+                    </td>
                   </tr>
                 ))}
                 {list.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-muted-foreground">
+                    <td colSpan={7} className="py-10 text-center text-muted-foreground">
                       No entries match.
                     </td>
                   </tr>
@@ -175,6 +216,63 @@ function AuditLog() {
           </div>
         </Card>
       </PageContainer>
+      <Dialog open={!!selectedEntry} onOpenChange={(open) => !open && setSelectedEntry(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{selectedEntry?.action}</DialogTitle>
+            <DialogDescription>
+              {selectedEntry && new Date(selectedEntry.date).toLocaleString()} by{" "}
+              {selectedEntry?.user}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedEntry && (
+            <div className="space-y-4 text-sm">
+              <div className="grid gap-3 rounded-md border bg-accent/20 p-4 sm:grid-cols-2">
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Module
+                  </div>
+                  <div className="mt-1 font-medium">{selectedEntry.module}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Action
+                  </div>
+                  <div className="mt-1 font-medium">{selectedEntry.action}</div>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Record
+                </div>
+                <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
+                  {selectedEntry.details}
+                </p>
+              </div>
+              {(selectedEntry.oldValue || selectedEntry.newValue) && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-md border p-3">
+                    <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Before
+                    </div>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-sm">
+                      {selectedEntry.oldValue || "Not recorded"}
+                    </p>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      After
+                    </div>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-sm">
+                      {selectedEntry.newValue || "Not recorded"}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

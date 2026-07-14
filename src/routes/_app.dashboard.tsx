@@ -97,7 +97,7 @@ function AdminDash() {
         description="Real-time view of the Global Partner Program."
         actions={
           <>
-            <Link to="/pipeline">
+            <Link to="/pipeline" search={{ view: "kanban" }}>
               <Button variant="outline">
                 <KanbanSquare className="mr-2 h-4 w-4" />
                 Pipeline
@@ -247,7 +247,7 @@ function AdminDash() {
                 <li key={entry.id} className="py-2 text-sm">
                   <div>{entry.text}</div>
                   <div className="text-xs text-muted-foreground">
-                    {entry.user} · {new Date(entry.date).toLocaleString()}
+                    {entry.user} - {new Date(entry.date).toLocaleString()}
                   </div>
                 </li>
               ))}
@@ -267,8 +267,7 @@ function AdminDash() {
                 <div className="flex-1">
                   <div className="text-sm">{a.text}</div>
                   <div className="text-[11px] text-muted-foreground">
-                    {a.user} · {new Date(a.date).toLocaleString()}
-                    {a.leadId ? ` · ${a.leadId}` : ""}
+                    {a.user} - {new Date(a.date).toLocaleString()}
                   </div>
                 </div>
               </li>
@@ -379,7 +378,7 @@ function PartnerDash({ partnerId }: { partnerId: string }) {
                   <li key={a.id} className="text-sm">
                     <div>{a.text}</div>
                     <div className="text-[11px] text-muted-foreground">
-                      {a.user} · {new Date(a.date).toLocaleString()} · {a.leadId}
+                      {a.user} - {new Date(a.date).toLocaleString()}
                     </div>
                   </li>
                 ))}

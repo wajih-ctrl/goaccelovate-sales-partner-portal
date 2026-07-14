@@ -15,6 +15,7 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AccessDeniedRouteImport } from './routes/access-denied'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiUsersRouteImport } from './routes/api.users'
 import { Route as ApiInvitationsRouteImport } from './routes/api.invitations'
 import { Route as AppUsersRouteImport } from './routes/_app.users'
 import { Route as AppSubmitLeadRouteImport } from './routes/_app.submit-lead'
@@ -33,6 +34,7 @@ import { Route as AppClientPaymentsRouteImport } from './routes/_app.client-paym
 import { Route as AppAuditLogRouteImport } from './routes/_app.audit-log'
 import { Route as AppAnnouncementsRouteImport } from './routes/_app.announcements'
 import { Route as AppPartnersIdRouteImport } from './routes/_app.partners.$id'
+import { Route as AppLegalTypeRouteImport } from './routes/_app.legal.$type'
 import { Route as AppLeadsIdRouteImport } from './routes/_app.leads.$id'
 
 const LoginRoute = LoginRouteImport.update({
@@ -62,6 +64,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUsersRoute = ApiUsersRouteImport.update({
+  id: '/api/users',
+  path: '/api/users',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiInvitationsRoute = ApiInvitationsRouteImport.update({
@@ -154,6 +161,11 @@ const AppPartnersIdRoute = AppPartnersIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AppPartnersRoute,
 } as any)
+const AppLegalTypeRoute = AppLegalTypeRouteImport.update({
+  id: '/legal/$type',
+  path: '/legal/$type',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppLeadsIdRoute = AppLeadsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -183,7 +195,9 @@ export interface FileRoutesByFullPath {
   '/submit-lead': typeof AppSubmitLeadRoute
   '/users': typeof AppUsersRoute
   '/api/invitations': typeof ApiInvitationsRoute
+  '/api/users': typeof ApiUsersRoute
   '/leads/$id': typeof AppLeadsIdRoute
+  '/legal/$type': typeof AppLegalTypeRoute
   '/partners/$id': typeof AppPartnersIdRoute
 }
 export interface FileRoutesByTo {
@@ -209,7 +223,9 @@ export interface FileRoutesByTo {
   '/submit-lead': typeof AppSubmitLeadRoute
   '/users': typeof AppUsersRoute
   '/api/invitations': typeof ApiInvitationsRoute
+  '/api/users': typeof ApiUsersRoute
   '/leads/$id': typeof AppLeadsIdRoute
+  '/legal/$type': typeof AppLegalTypeRoute
   '/partners/$id': typeof AppPartnersIdRoute
 }
 export interface FileRoutesById {
@@ -237,7 +253,9 @@ export interface FileRoutesById {
   '/_app/submit-lead': typeof AppSubmitLeadRoute
   '/_app/users': typeof AppUsersRoute
   '/api/invitations': typeof ApiInvitationsRoute
+  '/api/users': typeof ApiUsersRoute
   '/_app/leads/$id': typeof AppLeadsIdRoute
+  '/_app/legal/$type': typeof AppLegalTypeRoute
   '/_app/partners/$id': typeof AppPartnersIdRoute
 }
 export interface FileRouteTypes {
@@ -265,7 +283,9 @@ export interface FileRouteTypes {
     | '/submit-lead'
     | '/users'
     | '/api/invitations'
+    | '/api/users'
     | '/leads/$id'
+    | '/legal/$type'
     | '/partners/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -291,7 +311,9 @@ export interface FileRouteTypes {
     | '/submit-lead'
     | '/users'
     | '/api/invitations'
+    | '/api/users'
     | '/leads/$id'
+    | '/legal/$type'
     | '/partners/$id'
   id:
     | '__root__'
@@ -318,7 +340,9 @@ export interface FileRouteTypes {
     | '/_app/submit-lead'
     | '/_app/users'
     | '/api/invitations'
+    | '/api/users'
     | '/_app/leads/$id'
+    | '/_app/legal/$type'
     | '/_app/partners/$id'
   fileRoutesById: FileRoutesById
 }
@@ -330,6 +354,7 @@ export interface RootRouteChildren {
   InvitationRoute: typeof InvitationRoute
   LoginRoute: typeof LoginRoute
   ApiInvitationsRoute: typeof ApiInvitationsRoute
+  ApiUsersRoute: typeof ApiUsersRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -374,6 +399,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/users': {
+      id: '/api/users'
+      path: '/api/users'
+      fullPath: '/api/users'
+      preLoaderRoute: typeof ApiUsersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/invitations': {
@@ -502,6 +534,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPartnersIdRouteImport
       parentRoute: typeof AppPartnersRoute
     }
+    '/_app/legal/$type': {
+      id: '/_app/legal/$type'
+      path: '/legal/$type'
+      fullPath: '/legal/$type'
+      preLoaderRoute: typeof AppLegalTypeRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/leads/$id': {
       id: '/_app/leads/$id'
       path: '/$id'
@@ -553,6 +592,7 @@ interface AppRouteChildren {
   AppSettingsRoute: typeof AppSettingsRoute
   AppSubmitLeadRoute: typeof AppSubmitLeadRoute
   AppUsersRoute: typeof AppUsersRoute
+  AppLegalTypeRoute: typeof AppLegalTypeRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -572,6 +612,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsRoute: AppSettingsRoute,
   AppSubmitLeadRoute: AppSubmitLeadRoute,
   AppUsersRoute: AppUsersRoute,
+  AppLegalTypeRoute: AppLegalTypeRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -584,6 +625,7 @@ const rootRouteChildren: RootRouteChildren = {
   InvitationRoute: InvitationRoute,
   LoginRoute: LoginRoute,
   ApiInvitationsRoute: ApiInvitationsRoute,
+  ApiUsersRoute: ApiUsersRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

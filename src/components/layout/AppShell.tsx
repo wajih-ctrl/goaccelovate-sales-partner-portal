@@ -8,7 +8,6 @@ import {
   Briefcase,
   ListChecks,
   KanbanSquare,
-  List,
   DollarSign,
   Wallet,
   CreditCard,
@@ -45,8 +44,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { to: "/users", label: "User Management", icon: Users },
   { to: "/partners", label: "Partners", icon: Briefcase },
   { to: "/leads", label: "All Leads", icon: ListChecks },
-  { to: "/pipeline", label: "Pipeline Kanban", icon: KanbanSquare },
-  { to: "/pipeline-list", label: "Pipeline List", icon: List },
+  { to: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { to: "/commissions", label: "Commissions", icon: DollarSign },
   { to: "/payouts", label: "Payout Requests", icon: Wallet },
   { to: "/client-payments", label: "Client Payments", icon: CreditCard },
@@ -61,8 +59,7 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/users", label: "Sales Partners", icon: Users },
   { to: "/partners", label: "Partner Profiles", icon: Briefcase },
   { to: "/leads", label: "All Leads", icon: ListChecks },
-  { to: "/pipeline", label: "Pipeline Kanban", icon: KanbanSquare },
-  { to: "/pipeline-list", label: "Pipeline List", icon: List },
+  { to: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { to: "/commissions", label: "Commissions", icon: DollarSign },
   { to: "/payouts", label: "Payout Requests", icon: Wallet },
   { to: "/client-payments", label: "Client Payments", icon: CreditCard },
@@ -75,6 +72,7 @@ const PARTNER_NAV: NavItem[] = [
   { to: "/profile", label: "My Profile", icon: UserCircle },
   { to: "/onboarding", label: "Onboarding", icon: ClipboardCheck },
   { to: "/leads", label: "My Leads", icon: ListChecks },
+  { to: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { to: "/commissions", label: "My Commissions", icon: DollarSign },
   { to: "/announcements", label: "Announcements", icon: Megaphone },
   { to: "/reports", label: "My Reports", icon: BarChart3 },
@@ -158,7 +156,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           </Button>
         </div>
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <nav className="flex-1 overflow-y-auto px-3 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {!collapsed && (
             <div className="mb-2 px-2 text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/50">
               {ROLE_LABEL[user.role]}
@@ -312,7 +310,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                           {selectedNotification.body}
                         </p>
                       </div>
-                      <div className="grid grid-cols-2 gap-3 rounded-md border bg-accent/20 p-3 text-xs">
+                      <div className="grid grid-cols-2 gap-3 rounded-md border bg-accent/20 p-3 text-xs sm:grid-cols-3">
                         <div>
                           <div className="font-medium text-muted-foreground">Status</div>
                           <div>{selectedNotification.read ? "Read" : "Unread"}</div>
@@ -324,10 +322,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                         <div>
                           <div className="font-medium text-muted-foreground">Type</div>
                           <div className="capitalize">{selectedNotification.type}</div>
-                        </div>
-                        <div>
-                          <div className="font-medium text-muted-foreground">Notification ID</div>
-                          <div className="break-all">{selectedNotification.id}</div>
                         </div>
                       </div>
                     </div>

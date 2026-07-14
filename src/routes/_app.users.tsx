@@ -16,6 +16,7 @@ import {
 import { useState } from "react";
 import { FormDialog, ReasonDialog } from "@/components/common/dialogs";
 import { revokeRealInvitation, sendRealInvitation } from "@/lib/real-invitations";
+import { deleteRealUser } from "@/lib/real-users";
 
 export const Route = createFileRoute("/_app/users")({ component: UsersPage });
 
@@ -47,7 +48,11 @@ function UsersPage() {
   const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
   const [rateTarget, setRateTarget] = useState<{ id: string; rate: string } | null>(null);
   const [roleTarget, setRoleTarget] = useState<{ id: string; role: InviteRole } | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    kind: "staff" | "partner";
+    name: string;
+  } | null>(null);
 
   if (!user || !["admin", "super_admin"].includes(user.role))
     return <Navigate to="/access-denied" />;
@@ -200,9 +205,12 @@ function UsersPage() {
                                 )}
                                 <DropdownMenuItem
                                   className="text-destructive"
-                                  onClick={() => setDeleteTarget(u.id)}
+                                  disabled={u.id === user.id}
+                                  onClick={() =>
+                                    setDeleteTarget({ id: u.id, kind: "staff", name: u.name })
+                                  }
                                 >
-                                  Deactivate account
+                                  Delete account
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -210,63 +218,67 @@ function UsersPage() {
                         </td>
                       </tr>
                     ))}
-                {partners.map((p) => (
-                  <tr key={p.id} className="border-t hover:bg-accent/20">
-                    <td className="px-4 py-3 font-medium">{p.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{p.email}</td>
-                    <td className="px-4 py-3">Sales Partner</td>
-                    <td className="px-4 py-3 text-right">{p.commissionRate}%</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={p.status} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {isSuperAdmin && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() =>
-                                setRateTarget({ id: p.id, rate: String(p.commissionRate) })
-                              }
-                            >
-                              Set commission rate
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {p.status === "Active" ? (
+                {partners
+                  .filter((partner) => partner.status !== "Deactivated")
+                  .map((p) => (
+                    <tr key={p.id} className="border-t hover:bg-accent/20">
+                      <td className="px-4 py-3 font-medium">{p.name}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{p.email}</td>
+                      <td className="px-4 py-3">Sales Partner</td>
+                      <td className="px-4 py-3 text-right">{p.commissionRate}%</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={p.status} />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {isSuperAdmin && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
                               <DropdownMenuItem
-                                onClick={() => {
-                                  suspendUser(p.id, user.name);
-                                  toast.warning(`${p.name} suspended`);
-                                }}
+                                onClick={() =>
+                                  setRateTarget({ id: p.id, rate: String(p.commissionRate) })
+                                }
                               >
-                                Suspend
+                                Set commission rate
                               </DropdownMenuItem>
-                            ) : (
+                              <DropdownMenuSeparator />
+                              {p.status === "Active" ? (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    suspendUser(p.id, user.name);
+                                    toast.warning(`${p.name} suspended`);
+                                  }}
+                                >
+                                  Suspend
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    reactivateUser(p.id, user.name);
+                                    toast.success(`${p.name} reactivated`);
+                                  }}
+                                >
+                                  Reactivate
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
-                                onClick={() => {
-                                  reactivateUser(p.id, user.name);
-                                  toast.success(`${p.name} reactivated`);
-                                }}
+                                className="text-destructive"
+                                onClick={() =>
+                                  setDeleteTarget({ id: p.id, kind: "partner", name: p.name })
+                                }
                               >
-                                Reactivate
+                                Delete account
                               </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => setDeleteTarget(p.id)}
-                            >
-                              Delete account
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
@@ -415,12 +427,24 @@ function UsersPage() {
         open={!!deleteTarget}
         onOpenChange={(b) => !b && setDeleteTarget(null)}
         title="Delete account"
-        description="This will remove the partner from the system. Type a justification for the audit log."
+        description={`Permanently remove ${deleteTarget?.name || "this user"}'s login access. Historical lead and financial records will remain archived for audit integrity.`}
         confirmLabel="Delete account"
-        onConfirm={(reason) => {
-          deleteUser(deleteTarget!, `${user.name} (${reason})`);
-          toast.error("Account deleted");
+        onConfirm={async (reason) => {
+          if (!deleteTarget) return false;
+          const result = await deleteRealUser({
+            id: deleteTarget.id,
+            kind: deleteTarget.kind,
+            reason,
+          });
+          if (result.error) {
+            toast.error(result.error);
+            return false;
+          }
+          deleteUser(deleteTarget.id, user.name);
+          if (result.warning) toast.warning(result.warning);
+          else toast.success(`${deleteTarget.name}'s account was deleted.`);
           setDeleteTarget(null);
+          return true;
         }}
       />
     </>

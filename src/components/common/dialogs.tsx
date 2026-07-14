@@ -26,9 +26,10 @@ export function ReasonDialog({
   confirmLabel?: string;
   destructive?: boolean;
   placeholder?: string;
-  onConfirm: (reason: string) => void;
+  onConfirm: (reason: string) => void | boolean | Promise<void | boolean>;
 }) {
   const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   return (
     <Dialog
       open={open}
@@ -55,14 +56,17 @@ export function ReasonDialog({
           </Button>
           <Button
             variant={destructive ? "destructive" : "default"}
-            disabled={!reason.trim()}
-            onClick={() => {
-              onConfirm(reason.trim());
+            disabled={!reason.trim() || submitting}
+            onClick={async () => {
+              setSubmitting(true);
+              const shouldClose = await onConfirm(reason.trim());
+              setSubmitting(false);
+              if (shouldClose === false) return;
               setReason("");
               onOpenChange(false);
             }}
           >
-            {confirmLabel}
+            {submitting ? "Working..." : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
