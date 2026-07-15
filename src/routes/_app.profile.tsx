@@ -37,6 +37,8 @@ function Profile() {
   };
   const documents = partner ? partnerDocuments[partner.id] || [] : [];
   const [p, setP] = useState(fallbackPartner);
+  const [dirty, setDirty] = useState(false);
+  const initializedPartnerId = useRef<string | null>(null);
   const [countries, setCountries] = useState<CountryOption[]>([]);
   const [countriesLoading, setCountriesLoading] = useState(true);
   const [cities, setCities] = useState<string[]>([]);
@@ -44,8 +46,12 @@ function Profile() {
   const currentCity = useRef(p.city);
   currentCity.current = p.city;
   useEffect(() => {
-    if (partner) setP(partner);
-  }, [partner]);
+    if (!partner) return;
+    if (initializedPartnerId.current !== partner.id || !dirty) {
+      initializedPartnerId.current = partner.id;
+      setP(partner);
+    }
+  }, [dirty, partner]);
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
@@ -123,6 +129,11 @@ function Profile() {
     );
   }
 
+  const updateDraft = (patch: Partial<Partner>) => {
+    setDirty(true);
+    setP((current) => ({ ...current, ...patch }));
+  };
+
   const save = () => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email)) {
       toast.error("Invalid email");
@@ -150,6 +161,7 @@ function Profile() {
       country: p.country,
       bio: p.bio,
     });
+    setDirty(false);
     toast.success("Profile updated. Your onboarding profile step is complete.");
   };
 
@@ -201,7 +213,7 @@ function Profile() {
                   id="profile-name"
                   className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
                   value={p.name}
-                  onChange={(e) => setP({ ...p, name: e.target.value })}
+                  onChange={(e) => updateDraft({ name: e.target.value })}
                   required
                 />
               </div>
@@ -224,7 +236,7 @@ function Profile() {
                   id="profile-phone"
                   className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
                   value={p.phone}
-                  onChange={(e) => setP({ ...p, phone: e.target.value })}
+                  onChange={(e) => updateDraft({ phone: e.target.value })}
                   required
                 />
               </div>
@@ -239,7 +251,7 @@ function Profile() {
                   id="profile-linkedin"
                   className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
                   value={p.linkedin}
-                  onChange={(e) => setP({ ...p, linkedin: e.target.value })}
+                  onChange={(e) => updateDraft({ linkedin: e.target.value })}
                 />
               </div>
               <div>
@@ -247,7 +259,7 @@ function Profile() {
                 <LocationCombobox
                   choices={countries.map((country) => country.name)}
                   value={p.country}
-                  onChange={(country) => setP({ ...p, country, city: "" })}
+                  onChange={(country) => updateDraft({ country, city: "" })}
                   placeholder={countriesLoading ? "Loading countries..." : "Select country"}
                   searchPlaceholder="Search countries..."
                   ariaLabel="Country"
@@ -259,7 +271,7 @@ function Profile() {
                 <LocationCombobox
                   choices={cities}
                   value={p.city}
-                  onChange={(city) => setP({ ...p, city })}
+                  onChange={(city) => updateDraft({ city })}
                   placeholder={citiesLoading ? "Loading cities..." : "Select city"}
                   searchPlaceholder="Search cities..."
                   ariaLabel="City"
@@ -276,7 +288,7 @@ function Profile() {
                 rows={4}
                 className="mt-1 w-full rounded-md border bg-background p-3 text-sm"
                 value={p.bio}
-                onChange={(e) => setP({ ...p, bio: e.target.value })}
+                onChange={(e) => updateDraft({ bio: e.target.value })}
                 required
               />
             </div>

@@ -73,6 +73,7 @@ export interface StoredAttachment {
 }
 
 interface AppState {
+  hydrated: boolean;
   partners: Partner[];
   leads: Lead[];
   commissions: Commission[];
@@ -730,7 +731,9 @@ function groupOnboarding(rows: any[]) {
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { user, ready, authMode } = useAuth();
+  const businessUserId = user?.id;
   const realMode = ready && authMode === "supabase" && isSupabaseConfigured && Boolean(supabase);
+  const [hydrated, setHydrated] = useState(false);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [commissions, setCommissions] = useState<Commission[]>([]);
@@ -768,7 +771,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshSupabaseState = useCallback(async () => {
-    if (!supabase || !user) return;
+    if (!supabase || !businessUserId) return;
 
     const [
       partnersRes,
@@ -905,19 +908,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         status: "Invited",
       })),
     );
-  }, [user]);
+  }, [businessUserId]);
 
   useEffect(() => {
-    if (!ready) return;
+    let active = true;
+    if (!ready) {
+      setHydrated(false);
+      return () => {
+        active = false;
+      };
+    }
+    setHydrated(false);
     if (!realMode) {
       clearBusinessState();
-      return;
+      setHydrated(true);
+      return () => {
+        active = false;
+      };
     }
-    refreshSupabaseState().catch((error) => {
-      console.error(error);
-      toast.error("Unable to load Supabase business data.");
-      clearBusinessState();
-    });
+    refreshSupabaseState()
+      .catch((error) => {
+        console.error(error);
+        toast.error("Unable to load Supabase business data.");
+        clearBusinessState();
+      })
+      .finally(() => {
+        if (active) setHydrated(true);
+      });
+    return () => {
+      active = false;
+    };
   }, [clearBusinessState, ready, realMode, refreshSupabaseState]);
 
   const handleWriteError = useCallback((error: unknown, fallback = "Supabase write failed.") => {
@@ -1104,6 +1124,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         toast.error("Closed Won requires a confirmed deal value.");
         return;
       }
+      if (realMode && supabase) {
+        void (supabase as any)
+          .rpc("update_lead_stage_secure", {
+            target_lead: id,
+            target_stage: stage,
+            change_reason: reason || null,
+          })
+          .then(({ error }: { error: unknown }) => {
+            if (error) handleWriteError(error);
+            reloadAfterWrite();
+          });
+        return;
+      }
       setLeads((prev) =>
         prev.map((l) => {
           if (l.id !== id) return l;
@@ -1159,18 +1192,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return next;
         }),
       );
-      if (realMode && supabase) {
-        void (supabase as any)
-          .rpc("update_lead_stage_secure", {
-            target_lead: id,
-            target_stage: stage,
-            change_reason: reason || null,
-          })
-          .then(({ error }: { error: unknown }) => {
-            if (error) handleWriteError(error);
-            reloadAfterWrite();
-          });
-      }
     },
     [commissions, handleWriteError, leads, partners, realMode, reloadAfterWrite, user],
   );
@@ -2710,6 +2731,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const value: Ctx = {
+    hydrated,
     partners,
     leads,
     commissions,

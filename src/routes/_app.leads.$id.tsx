@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useState } from "react";
 import { ArrowLeft, Lock, MessageSquare, Phone, FileUp, Activity } from "lucide-react";
 import { FormDialog, ReasonDialog } from "@/components/common/dialogs";
+import { DealPaymentPanel } from "@/components/payments/DealPaymentPanel";
 import { canMoveLeadStage, isCommercialStage, LEAD_STAGES } from "@/lib/program";
 
 export const Route = createFileRoute("/_app/leads/$id")({ component: LeadDetail });
@@ -45,6 +46,13 @@ function LeadDetail() {
     private: false,
   });
 
+  if (!store.hydrated) {
+    return (
+      <PageContainer>
+        <Card className="p-8 text-center text-sm text-muted-foreground">Loading deal...</Card>
+      </PageContainer>
+    );
+  }
   if (!lead) return <Navigate to="/leads" />;
   if (user?.role === "partner" && lead.partnerId !== user.partnerId)
     return <Navigate to="/access-denied" />;
@@ -257,6 +265,8 @@ function LeadDetail() {
           </Card>
 
           <div className="lg:col-span-2 space-y-4">
+            {isAdmin && <DealPaymentPanel lead={lead} actor={user!.name} />}
+
             <Card className="p-5">
               <h3 className="mb-2 font-semibold">Description</h3>
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">

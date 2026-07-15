@@ -28,6 +28,7 @@ function Payouts() {
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [payId, setPayId] = useState<string | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
   const [pay, setPay] = useState({
     amount: "",
     method: "Bank Transfer",
@@ -93,12 +94,18 @@ function Payouts() {
                           <>
                             <Button
                               size="sm"
+                              disabled={processingId === p.id}
                               onClick={async () => {
-                                const approved = await approvePayout(p.id, user!.name);
-                                if (approved) toast.success("Payout request approved");
+                                setProcessingId(p.id);
+                                try {
+                                  const approved = await approvePayout(p.id, user!.name);
+                                  if (approved) toast.success("Payout request approved");
+                                } finally {
+                                  setProcessingId(null);
+                                }
                               }}
                             >
-                              Approve
+                              {processingId === p.id ? "Approving..." : "Approve"}
                             </Button>
                             <Button size="sm" variant="outline" onClick={() => setRejectId(p.id)}>
                               Reject
@@ -113,7 +120,7 @@ function Payouts() {
                               setPay((current) => ({ ...current, amount: String(p.amount) }));
                             }}
                           >
-                            Mark paid
+                            Record payment
                           </Button>
                         )}
                       </td>
@@ -157,7 +164,8 @@ function Payouts() {
       <FormDialog
         open={!!payId}
         onOpenChange={(b) => !b && setPayId(null)}
-        title={`Record payment for ${payId || ""}`}
+        title="Record external payout payment"
+        description="Enter the payment details after the approved payout has been sent outside the portal."
         canSubmit={Number(pay.amount) > 0 && !!pay.reference.trim() && !!pay.date}
         submitLabel="Record payment"
         onSubmit={async () => {

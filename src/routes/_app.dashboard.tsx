@@ -7,6 +7,7 @@ import { useStore } from "@/lib/store";
 import { fmtCurrency, daysSince } from "@/lib/domain";
 import { isAnnouncementTargeted } from "@/lib/announcements";
 import type { ReactNode } from "react";
+import { PartnerPayoutRequestButton } from "@/components/commissions/PartnerPayoutRequestButton";
 import {
   Users,
   TrendingUp,
@@ -328,12 +329,7 @@ function PartnerDash({ partnerId }: { partnerId: string }) {
             <Link to="/leads">
               <Button variant="outline">View My Leads</Button>
             </Link>
-            <Link to="/commissions">
-              <Button variant="outline">
-                <Wallet className="mr-2 h-4 w-4" />
-                Request Payout
-              </Button>
-            </Link>
+            <PartnerPayoutRequestButton variant="outline" />
           </>
         }
       />

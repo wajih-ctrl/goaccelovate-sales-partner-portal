@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useState } from "react";
 import { FormDialog, ReasonDialog } from "@/components/common/dialogs";
+import { PartnerPayoutRequestButton } from "@/components/commissions/PartnerPayoutRequestButton";
 
 export const Route = createFileRoute("/_app/commissions")({ component: Commissions });
 
@@ -29,7 +30,6 @@ function Commissions() {
     setCommissionState,
     waiveCommission,
     payouts,
-    requestPayout,
   } = useStore();
   const isPartner = user?.role === "partner";
   const list = isPartner ? commissions.filter((c) => c.partnerId === user.partnerId) : commissions;
@@ -48,14 +48,6 @@ function Commissions() {
   const [newRate, setNewRate] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
   const [waiveId, setWaiveId] = useState<string | null>(null);
-  const [payoutOpen, setPayoutOpen] = useState(false);
-  const [selectedCommissions, setSelectedCommissions] = useState<string[]>([]);
-  const [payoutMessage, setPayoutMessage] = useState("");
-  const eligible = list.filter(
-    (commission) =>
-      commission.state === "Unpaid" &&
-      (commission.eligibleAmount || 0) - (commission.paidAmount || 0) > 0,
-  );
   const payoutHistory = isPartner
     ? payouts.filter((payout) => payout.partnerId === user?.partnerId)
     : [];
@@ -118,11 +110,7 @@ function Commissions() {
                 Export
               </Button>
             )}
-            {isPartner && (
-              <Button onClick={() => setPayoutOpen(true)} disabled={eligible.length === 0}>
-                Request Payout
-              </Button>
-            )}
+            {isPartner && <PartnerPayoutRequestButton />}
           </>
         }
       />
@@ -481,65 +469,6 @@ function Commissions() {
           setWaiveId(null);
         }}
       />
-
-      <FormDialog
-        open={payoutOpen}
-        onOpenChange={setPayoutOpen}
-        title="Request payout"
-        submitLabel="Submit request"
-        canSubmit={selectedCommissions.length > 0}
-        onSubmit={async () => {
-          const requested = await requestPayout(
-            user!.partnerId!,
-            selectedCommissions,
-            payoutMessage.trim(),
-            user!.name,
-          );
-          if (!requested) return;
-          toast.success("Payout request submitted");
-          setPayoutOpen(false);
-          setSelectedCommissions([]);
-          setPayoutMessage("");
-        }}
-      >
-        <div className="space-y-2">
-          {eligible.map((commission) => {
-            const lead = leads.find((item) => item.id === commission.leadId);
-            const balance = (commission.eligibleAmount || 0) - (commission.paidAmount || 0);
-            return (
-              <label
-                key={commission.id}
-                className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm"
-              >
-                <span className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedCommissions.includes(commission.id)}
-                    onChange={(event) =>
-                      setSelectedCommissions((current) =>
-                        event.target.checked
-                          ? [...current, commission.id]
-                          : current.filter((id) => id !== commission.id),
-                      )
-                    }
-                  />
-                  {lead?.company || commission.id}
-                </span>
-                <strong>{fmtCurrency(balance)}</strong>
-              </label>
-            );
-          })}
-        </div>
-        <label className="text-xs">
-          Message (optional)
-          <textarea
-            rows={3}
-            className="mt-1 w-full rounded-md border bg-background p-2 text-sm"
-            value={payoutMessage}
-            onChange={(event) => setPayoutMessage(event.target.value)}
-          />
-        </label>
-      </FormDialog>
     </>
   );
 }

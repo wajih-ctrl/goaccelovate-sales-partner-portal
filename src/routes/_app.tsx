@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/lib/auth";
 import { isAgreementRestricted, isPathAllowedForUser } from "@/lib/permissions";
+import { useStore } from "@/lib/store";
 
 export const Route = createFileRoute("/_app")({
   component: AppLayout,
@@ -10,6 +11,7 @@ export const Route = createFileRoute("/_app")({
 
 function AppLayout() {
   const { user, ready, validateAccount } = useAuth();
+  const { hydrated } = useStore();
   const userId = user?.id;
   const pathname = useRouterState({ select: (state) => state.location.pathname });
 
@@ -19,6 +21,13 @@ function AppLayout() {
 
   if (!ready) return null;
   if (!user) return <Navigate to="/login" replace />;
+  if (!hydrated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        Loading workspace...
+      </div>
+    );
+  }
   if (!isPathAllowedForUser(user, pathname)) {
     return isAgreementRestricted(user) ? (
       <Navigate to="/onboarding" replace />

@@ -24,16 +24,16 @@ function ClientPayments() {
   );
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const empty = {
-    leadId: eligibleLeads[0]?.id || "",
-    paymentType: "Advance" as "Advance" | "Final",
+  const emptyForm = (paymentType: "Advance" | "Final" = "Advance") => ({
+    leadId: eligibleLeads.find((lead) => canRecordClientPayment(paymentType, lead.stage))?.id || "",
+    paymentType,
     amount: "",
     date: new Date().toISOString().slice(0, 10),
     reference: "",
     method: "Wire Transfer",
     notes: "",
-  };
-  const [form, setForm] = useState(empty);
+  });
+  const [form, setForm] = useState(() => emptyForm());
   if (user?.role === "partner") return <Navigate to="/access-denied" />;
 
   return (
@@ -42,7 +42,13 @@ function ClientPayments() {
         title="Client Payments"
         description="Record confirmed advance and final payments against pipeline deals."
         actions={
-          <Button onClick={() => setOpen(true)} disabled={eligibleLeads.length === 0}>
+          <Button
+            onClick={() => {
+              setForm(emptyForm());
+              setOpen(true);
+            }}
+            disabled={eligibleLeads.length === 0}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Record payment
           </Button>
@@ -149,7 +155,7 @@ function ClientPayments() {
         open={open}
         onOpenChange={(b) => {
           setOpen(b);
-          if (!b) setForm(empty);
+          if (!b) setForm(emptyForm());
         }}
         title="Record client payment"
         submitLabel="Record payment"
@@ -183,7 +189,7 @@ function ClientPayments() {
             `${form.paymentType} payment recorded and commission eligibility triggered.`,
           );
           setOpen(false);
-          setForm(empty);
+          setForm(emptyForm());
         }}
       >
         <label className="text-xs">
