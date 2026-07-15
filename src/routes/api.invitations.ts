@@ -193,7 +193,15 @@ export const Route = createFileRoute("/api/invitations")({
             .select("id")
             .single();
 
-          if (partnerError) return json({ error: partnerError.message }, 400);
+          if (partnerError) {
+            if (partnerError.code === "23505") {
+              return json(
+                { error: "An active Sales Partner or pending invitation already uses this email." },
+                409,
+              );
+            }
+            return json({ error: partnerError.message }, 400);
+          }
           partnerId = partner.id;
         }
 

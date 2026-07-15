@@ -33,7 +33,7 @@ function SubmitLead() {
   };
   const [form, setForm] = useState(empty);
   const [files, setFiles] = useState<File[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const [submitState, setSubmitState] = useState<"idle" | "submitting" | "uploading">("idle");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState<{
     id?: string;
@@ -70,12 +70,14 @@ function SubmitLead() {
   };
 
   const submit = async () => {
+    if (submitState !== "idle") return;
     const e = validate();
     setErrors(e);
     if (Object.keys(e).length) {
       toast.error("Please fix the errors below");
       return;
     }
+    setSubmitState("submitting");
     const email = form.contactEmail.toLowerCase().trim();
     const phone = form.contactPhone.replace(/\D/g, "");
     const isDup = leads.some(
@@ -103,21 +105,21 @@ function SubmitLead() {
         user.name,
       );
       if (files.length) {
-        setUploading(true);
+        setSubmitState("uploading");
         for (const file of files) {
           const uploaded = await addAttachment(lead.id, file, user.name, false);
           if (!uploaded) {
-            setUploading(false);
+            setSubmitState("idle");
             return;
           }
         }
-        setUploading(false);
       }
       setOnboardingStep(user.partnerId!, "firstLead", true, user.name);
       setSubmitted({ id: lead.id, duplicate: false });
       toast.success("Lead submitted successfully and added to your pipeline.");
+      setSubmitState("idle");
     } catch (error) {
-      setUploading(false);
+      setSubmitState("idle");
       if (error instanceof Error && error.name === "DuplicateLeadError") {
         setSubmitted({ duplicate: true, duplicateReason: error.message });
         toast.warning("Duplicate lead detected. Nothing was added to the pipeline.");
@@ -334,11 +336,15 @@ function SubmitLead() {
           </Field>
 
           <div className="flex justify-end gap-2 border-t pt-4">
-            <Button variant="outline" onClick={reset}>
+            <Button variant="outline" onClick={reset} disabled={submitState !== "idle"}>
               Clear
             </Button>
-            <Button onClick={submit} disabled={uploading}>
-              {uploading ? "Uploading..." : "Submit lead"}
+            <Button onClick={submit} disabled={submitState !== "idle"}>
+              {submitState === "uploading"
+                ? "Uploading attachments..."
+                : submitState === "submitting"
+                  ? "Submitting lead..."
+                  : "Submit lead"}
             </Button>
           </div>
         </Card>

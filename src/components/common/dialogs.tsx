@@ -89,12 +89,13 @@ export function FormDialog({
   title: string;
   description?: string;
   children: ReactNode;
-  onSubmit: () => void;
+  onSubmit: () => void | Promise<void>;
   submitLabel?: string;
   canSubmit?: boolean;
 }) {
+  const [submitting, setSubmitting] = useState(false);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -102,16 +103,21 @@ export function FormDialog({
         </DialogHeader>
         <div className="space-y-3">{children}</div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
-            disabled={!canSubmit}
-            onClick={() => {
-              onSubmit();
+            disabled={!canSubmit || submitting}
+            onClick={async () => {
+              setSubmitting(true);
+              try {
+                await onSubmit();
+              } finally {
+                setSubmitting(false);
+              }
             }}
           >
-            {submitLabel}
+            {submitting ? "Working..." : submitLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

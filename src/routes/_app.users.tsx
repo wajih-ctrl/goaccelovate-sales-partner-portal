@@ -290,6 +290,7 @@ function UsersPage() {
         onOpenChange={setShowInvite}
         title="Invite new user"
         canSubmit={
+          !inviteLoading &&
           !!invite.name.trim() &&
           !!invite.email.trim() &&
           /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invite.email) &&
