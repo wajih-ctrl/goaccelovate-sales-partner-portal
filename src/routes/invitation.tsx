@@ -43,7 +43,9 @@ function Invitation() {
     }
 
     toast.success(mode === "recovery" ? "Password updated" : "Invitation accepted");
-    nav({ to: mode === "recovery" ? "/dashboard" : "/onboarding" });
+    nav({
+      to: result.requiresAgreement || mode !== "recovery" ? "/onboarding" : "/dashboard",
+    });
   };
 
   return (

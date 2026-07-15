@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, Navigate, useRouterState } from "@tanstack/rea
 import { useEffect } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { useAuth } from "@/lib/auth";
-import { isPathAllowedForRole } from "@/lib/permissions";
+import { isAgreementRestricted, isPathAllowedForUser } from "@/lib/permissions";
 
 export const Route = createFileRoute("/_app")({
   component: AppLayout,
@@ -19,7 +19,13 @@ function AppLayout() {
 
   if (!ready) return null;
   if (!user) return <Navigate to="/login" replace />;
-  if (!isPathAllowedForRole(user.role, pathname)) return <Navigate to="/access-denied" replace />;
+  if (!isPathAllowedForUser(user, pathname)) {
+    return isAgreementRestricted(user) ? (
+      <Navigate to="/onboarding" replace />
+    ) : (
+      <Navigate to="/access-denied" replace />
+    );
+  }
   return (
     <AppShell>
       <Outlet />

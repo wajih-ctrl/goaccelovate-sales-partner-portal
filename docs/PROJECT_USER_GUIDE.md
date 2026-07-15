@@ -77,6 +77,9 @@ Recording an eligible payment releases the proportional commission amount. An ad
 
 The partner selects payable commission items in `My Commissions` and requests one payout. Admin approves or rejects it with a reason. After external payment, Admin records the exact approved amount, date, method, and transaction reference. The commission paid balance, payout history, audit entry, and partner notification update atomically.
 
+The complete browser and numerical verification procedure is documented in
+`PAYMENT_AND_PAYOUT_TEST_GUIDE.md`.
+
 Commission disputes and the separate payout navigation are not part of this program version.
 
 ## Announcements And Reports

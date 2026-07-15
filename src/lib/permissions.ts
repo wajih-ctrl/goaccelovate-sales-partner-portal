@@ -1,4 +1,4 @@
-import type { Role } from "./domain";
+import type { Role, User } from "./domain";
 
 const ADMIN_PATHS = [
   "/announcements",
@@ -29,6 +29,7 @@ const PARTNER_PATHS = [
 ];
 
 const SUPER_ADMIN_ONLY_PATHS = ["/audit-log", "/settings"];
+const PARTNER_PRE_AGREEMENT_PATHS = ["/onboarding", "/legal"];
 
 function pathMatches(pathname: string, allowedPath: string) {
   return pathname === allowedPath || pathname.startsWith(`${allowedPath}/`);
@@ -40,4 +41,17 @@ export function isPathAllowedForRole(role: Role, pathname: string) {
     return [...ADMIN_PATHS, ...SUPER_ADMIN_ONLY_PATHS].some((path) => pathMatches(pathname, path));
   if (role === "admin") return ADMIN_PATHS.some((path) => pathMatches(pathname, path));
   return PARTNER_PATHS.some((path) => pathMatches(pathname, path));
+}
+
+export function isAgreementRestricted(user: Pick<User, "role" | "agreementsComplete">) {
+  return user.role === "partner" && user.agreementsComplete !== true;
+}
+
+export function isPathAllowedForUser(
+  user: Pick<User, "role" | "agreementsComplete">,
+  pathname: string,
+) {
+  if (!isPathAllowedForRole(user.role, pathname)) return false;
+  if (!isAgreementRestricted(user)) return true;
+  return PARTNER_PRE_AGREEMENT_PATHS.some((path) => pathMatches(pathname, path));
 }

@@ -1,6 +1,8 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
+import type { Notification, User } from "@/lib/domain";
+import { isAgreementRestricted, isPathAllowedForUser } from "@/lib/permissions";
 import { type ComponentType, type ReactNode, useState } from "react";
 import {
   LayoutDashboard,
@@ -17,6 +19,7 @@ import {
   ShieldCheck,
   UserCircle,
   ClipboardCheck,
+  FileSignature,
   Bell,
   Search,
   LogOut,
@@ -78,10 +81,32 @@ const PARTNER_NAV: NavItem[] = [
   { to: "/reports", label: "My Reports", icon: BarChart3 },
 ];
 
-function getNav(role: string): NavItem[] {
-  if (role === "super_admin") return SUPER_ADMIN_NAV;
-  if (role === "admin") return ADMIN_NAV;
+const PARTNER_AGREEMENT_NAV: NavItem[] = [
+  { to: "/onboarding", label: "Agreement & NDA", icon: FileSignature },
+];
+
+function getNav(user: User): NavItem[] {
+  if (user.role === "super_admin") return SUPER_ADMIN_NAV;
+  if (user.role === "admin") return ADMIN_NAV;
+  if (isAgreementRestricted(user)) return PARTNER_AGREEMENT_NAV;
   return PARTNER_NAV;
+}
+
+function notificationDestination(notification: Notification, user: User) {
+  if (isAgreementRestricted(user)) return "/onboarding";
+
+  const text = `${notification.title} ${notification.body}`.toLowerCase();
+  if (/agreement|nda|onboarding|welcome kit/.test(text)) return "/onboarding";
+  if (/announcement/.test(text)) return "/announcements";
+  if (/payout/.test(text)) return user.role === "partner" ? "/commissions" : "/payouts";
+  if (/client payment|advance payment|final payment/.test(text))
+    return user.role === "partner" ? "/commissions" : "/client-payments";
+  if (/commission|dispute/.test(text)) return "/commissions";
+  if (/lead|pipeline|duplicate|discovery call|stage/.test(text)) return "/leads";
+  if (/invitation|account|user|profile/.test(text))
+    return user.role === "partner" ? "/profile" : "/users";
+  if (/setting/.test(text) && user.role === "super_admin") return "/settings";
+  return "/dashboard";
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -100,7 +125,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const { notifications, markNotificationRead, markAllNotificationsRead } = useStore();
   if (!user) return null;
-  const nav = getNav(user.role);
+  const agreementRestricted = isAgreementRestricted(user);
+  const nav = getNav(user);
   const unread = notifications.filter((n) => !n.read).length;
   const selectedNotification =
     notifications.find((notification) => notification.id === selectedNotificationId) || null;
@@ -241,21 +267,23 @@ export function AppShell({ children }: { children: ReactNode }) {
               <PanelLeftClose className="h-5 w-5" />
             )}
           </Button>
-          <form
-            className="relative hidden flex-1 max-w-md md:block"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const v = (new FormData(e.currentTarget).get("q") as string)?.trim();
-              if (v) navigate({ to: "/leads", search: { q: v } as never });
-            }}
-          >
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              name="q"
-              placeholder="Search leads by company or contact..."
-              className="h-9 w-full rounded-md border bg-background pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring/30"
-            />
-          </form>
+          {!agreementRestricted && (
+            <form
+              className="relative hidden flex-1 max-w-md md:block"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const v = (new FormData(e.currentTarget).get("q") as string)?.trim();
+                if (v) navigate({ to: "/leads", search: { q: v } as never });
+              }}
+            >
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                name="q"
+                placeholder="Search leads by company or contact..."
+                className="h-9 w-full rounded-md border bg-background pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring/30"
+              />
+            </form>
+          )}
           <div className="ml-auto flex min-w-0 items-center gap-2">
             <Popover onOpenChange={(open) => !open && setSelectedNotificationId(null)}>
               <PopoverTrigger asChild>
@@ -319,6 +347,21 @@ export function AppShell({ children }: { children: ReactNode }) {
                           <div className="capitalize">{selectedNotification.type}</div>
                         </div>
                       </div>
+                      {(() => {
+                        const destination = notificationDestination(selectedNotification, user);
+                        if (!isPathAllowedForUser(user, destination)) return null;
+                        return (
+                          <Button
+                            className="w-full"
+                            onClick={() => {
+                              setSelectedNotificationId(null);
+                              navigate({ to: destination as never });
+                            }}
+                          >
+                            Open related page
+                          </Button>
+                        );
+                      })()}
                     </div>
                   </>
                 ) : (
@@ -390,7 +433,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <div className="truncate text-xs text-muted-foreground">{user.email}</div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {user.role === "partner" && (
+                {user.role === "partner" && !agreementRestricted && (
                   <DropdownMenuItem onClick={() => navigate({ to: "/profile" })}>
                     My Profile
                   </DropdownMenuItem>

@@ -5,6 +5,7 @@ import { getAuthRedirectUrl, isSupabaseConfigured, supabase } from "./supabase";
 
 interface AuthResult {
   error?: string;
+  requiresAgreement?: boolean;
 }
 
 interface AuthCtx {
@@ -212,7 +213,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         return { error: "This portal account is no longer active." };
       }
-      return {};
+      return {
+        requiresAgreement: nextUser.role === "partner" && nextUser.agreementsComplete !== true,
+      };
     } catch (loadError) {
       const message =
         loadError instanceof Error ? loadError.message : "Unable to load account profile.";
@@ -263,7 +266,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthMode("supabase");
     }
 
-    return {};
+    return {
+      requiresAgreement: nextUser?.role === "partner" && nextUser.agreementsComplete !== true,
+    };
   };
 
   const logout = async () => {
