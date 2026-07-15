@@ -140,12 +140,6 @@ export const Route = createFileRoute("/api/users")({
           .eq("email", partner.email);
         if (invitationDeleteError) return json({ error: invitationDeleteError.message }, 500);
 
-        const { error: partnerUpdateError } = await service
-          .from("partner_profiles")
-          .update({ status: "deactivated" })
-          .eq("id", partner.id);
-        if (partnerUpdateError) return json({ error: partnerUpdateError.message }, 500);
-
         if (authIds.length) {
           const { error: profileUpdateError } = await service
             .from("profiles")
@@ -160,6 +154,27 @@ export const Route = createFileRoute("/api/users")({
           }
         }
 
+        const { error: hardDeleteError } = await service
+          .from("partner_profiles")
+          .delete()
+          .eq("id", partner.id);
+        let archivedPartnerRecord = false;
+        if (hardDeleteError) {
+          if (hardDeleteError.code !== "23503") {
+            return json({ error: hardDeleteError.message }, 500);
+          }
+          const { error: archiveError } = await service
+            .from("partner_profiles")
+            .update({
+              status: "deactivated",
+              user_id: null,
+              deleted_at: new Date().toISOString(),
+            })
+            .eq("id", partner.id);
+          if (archiveError) return json({ error: archiveError.message }, 500);
+          archivedPartnerRecord = true;
+        }
+
         const { error: auditError } = await service.from("audit_log").insert({
           actor_id: actor.id,
           actor_name: actor.full_name || actor.email,
@@ -168,11 +183,15 @@ export const Route = createFileRoute("/api/users")({
           record_id: partner.id,
           record_name: partner.name,
           old_value: { email: partner.email, status: partner.status },
-          new_value: { auth_deleted: true, archived_partner_record: true, reason },
+          new_value: {
+            account_deleted: true,
+            historical_records_retained: archivedPartnerRecord,
+            reason,
+          },
         });
         return json({
           id: partner.id,
-          archivedPartnerRecord: true,
+          archivedPartnerRecord,
           warning: auditError
             ? `Account deleted, but audit logging failed: ${auditError.message}`
             : null,

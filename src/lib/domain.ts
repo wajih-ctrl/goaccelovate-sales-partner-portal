@@ -180,6 +180,7 @@ export interface AuditEntry {
   details: string;
   oldValue?: string;
   newValue?: string;
+  changes: string[];
 }
 
 export const ONBOARDING_STEPS = [
@@ -187,9 +188,7 @@ export const ONBOARDING_STEPS = [
   { key: "nda", label: "NDA signed" },
   { key: "profile", label: "Profile fully filled in" },
   { key: "welcome", label: "Welcome kit acknowledged" },
-  { key: "enablement", label: "Enablement session attended" },
   { key: "firstLead", label: "First lead submitted" },
-  { key: "activation", label: "Activation confirmed by Admin" },
 ];
 
 export function fmtCurrency(n: number, currency = "USD"): string {

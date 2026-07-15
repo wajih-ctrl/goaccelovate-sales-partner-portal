@@ -1008,6 +1008,7 @@ export type Database = {
           commission_rate: number;
           country: string;
           created_at: string;
+          deleted_at: string | null;
           email: string;
           id: string;
           joined_date: string;
@@ -1026,6 +1027,7 @@ export type Database = {
           commission_rate?: number;
           country?: string;
           created_at?: string;
+          deleted_at?: string | null;
           email: string;
           id?: string;
           joined_date?: string;
@@ -1044,6 +1046,7 @@ export type Database = {
           commission_rate?: number;
           country?: string;
           created_at?: string;
+          deleted_at?: string | null;
           email?: string;
           id?: string;
           joined_date?: string;

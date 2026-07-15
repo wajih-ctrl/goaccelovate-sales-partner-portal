@@ -3,11 +3,10 @@ import { PageHeader, PageContainer } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
-import { mapStandaloneAudit, useStore } from "@/lib/store";
-import { supabase } from "@/lib/supabase";
+import { useStore } from "@/lib/store";
 import { toast } from "sonner";
 import { Download, Eye, Search } from "lucide-react";
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -22,37 +21,16 @@ export const Route = createFileRoute("/_app/audit-log")({ component: AuditLog })
 function AuditLog() {
   const { user } = useAuth();
   const { audit } = useStore();
-  const [remoteAudit, setRemoteAudit] = useState<AuditEntry[] | null>(null);
   const [moduleF, setModule] = useState("All");
   const [q, setQ] = useState("");
   const [userF, setUserF] = useState("All");
   const [actionF, setActionF] = useState("All");
   const [dateF, setDateF] = useState("");
   const [selectedEntry, setSelectedEntry] = useState<AuditEntry | null>(null);
-  const sourceAudit = remoteAudit ?? audit;
+  const sourceAudit = audit;
   const modules = ["All", ...Array.from(new Set(sourceAudit.map((a) => a.module)))];
   const users = ["All", ...Array.from(new Set(sourceAudit.map((a) => a.user)))];
   const actions = ["All", ...Array.from(new Set(sourceAudit.map((a) => a.action)))];
-
-  useEffect(() => {
-    if (user?.role !== "super_admin" || !supabase) return;
-    let cancelled = false;
-    void supabase
-      .from("audit_log")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) {
-          toast.error("Unable to load the audit log.");
-          return;
-        }
-        setRemoteAudit((data || []).map(mapStandaloneAudit));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.role]);
 
   const list = useMemo(() => {
     let l = sourceAudit;
@@ -61,22 +39,16 @@ function AuditLog() {
     if (actionF !== "All") l = l.filter((a) => a.action === actionF);
     if (dateF) l = l.filter((a) => a.date.slice(0, 10) === dateF);
     if (q)
-      l = l.filter((a) => (a.details + " " + a.action).toLowerCase().includes(q.toLowerCase()));
+      l = l.filter((a) =>
+        `${a.details} ${a.action} ${a.changes.join(" ")}`.toLowerCase().includes(q.toLowerCase()),
+      );
     return l;
   }, [sourceAudit, moduleF, userF, actionF, dateF, q]);
 
   const exportCsv = () => {
-    const rows = [["When", "User", "Module", "Action", "Details", "Old", "New"]];
+    const rows = [["When", "User", "Module", "Action", "Record", "Changes"]];
     list.forEach((a) =>
-      rows.push([
-        a.date,
-        a.user,
-        a.module,
-        a.action,
-        a.details,
-        a.oldValue || "",
-        a.newValue || "",
-      ]),
+      rows.push([a.date, a.user, a.module, a.action, a.details, a.changes.join(" ")]),
     );
     const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
@@ -108,7 +80,7 @@ function AuditLog() {
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search action or details…"
+                placeholder="Search actions, records, or changes..."
                 className="h-9 w-full rounded-md border bg-background pl-9 pr-3 text-sm"
               />
             </div>
@@ -159,7 +131,7 @@ function AuditLog() {
               Reset
             </Button>
             <span className="text-xs text-muted-foreground">
-              Append-only · {list.length} entries
+              Append-only | {list.length} entries
             </span>
           </div>
           <div className="responsive-table-scroll">
@@ -170,8 +142,8 @@ function AuditLog() {
                   <th className="px-4 py-3 text-left">User</th>
                   <th className="px-4 py-3 text-left">Module</th>
                   <th className="px-4 py-3 text-left">Action</th>
-                  <th className="px-4 py-3 text-left">Details</th>
-                  <th className="px-4 py-3 text-left">Change</th>
+                  <th className="px-4 py-3 text-left">Record</th>
+                  <th className="px-4 py-3 text-left">What happened</th>
                   <th className="px-4 py-3 text-right">Details</th>
                 </tr>
               </thead>
@@ -188,13 +160,9 @@ function AuditLog() {
                       {a.details}
                     </td>
                     <td className="max-w-96 whitespace-normal px-4 py-3 text-xs">
-                      {a.oldValue ? (
-                        <span className="text-muted-foreground">
-                          {a.oldValue} → <span className="text-foreground">{a.newValue}</span>
-                        </span>
-                      ) : (
-                        "—"
-                      )}
+                      {a.changes.length
+                        ? a.changes.slice(0, 2).join(" ")
+                        : "No field changes recorded."}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Button variant="ghost" size="sm" onClick={() => setSelectedEntry(a)}>
@@ -249,26 +217,27 @@ function AuditLog() {
                   {selectedEntry.details}
                 </p>
               </div>
-              {(selectedEntry.oldValue || selectedEntry.newValue) && (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-md border p-3">
-                    <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Before
-                    </div>
-                    <p className="mt-2 whitespace-pre-wrap break-words text-sm">
-                      {selectedEntry.oldValue || "Not recorded"}
-                    </p>
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      After
-                    </div>
-                    <p className="mt-2 whitespace-pre-wrap break-words text-sm">
-                      {selectedEntry.newValue || "Not recorded"}
-                    </p>
-                  </div>
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  What happened
                 </div>
-              )}
+                <div className="mt-2 rounded-md border bg-accent/10 p-3">
+                  {selectedEntry.changes.length ? (
+                    <ul className="space-y-2">
+                      {selectedEntry.changes.map((change) => (
+                        <li key={change} className="flex gap-2">
+                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
+                          <span className="break-words">{change}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      No field-level changes were recorded for this event.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>

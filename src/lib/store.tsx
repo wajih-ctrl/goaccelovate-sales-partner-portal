@@ -245,6 +245,12 @@ type DisplayContext = {
 const internalAuditKeys = new Set([
   "id",
   "actor_id",
+  "partner_id",
+  "lead_id",
+  "requested_by",
+  "approved_by",
+  "created_by",
+  "uploaded_by",
   "created_at",
   "updated_at",
   "user_agent",
@@ -264,9 +270,38 @@ const humanizeText = (value: string, context: DisplayContext) => {
 };
 
 const labelKey = (key: string) =>
-  key.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const parseJsonValue = (value: unknown): unknown => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed || !["{", "["].includes(trimmed[0])) return value;
+  try {
+    return parseJsonValue(JSON.parse(trimmed));
+  } catch {
+    return value;
+  }
+};
+
+const unwrapAuditValue = (value: unknown): unknown => {
+  const parsed = parseJsonValue(value);
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    Object.keys(parsed as Record<string, unknown>).length === 1 &&
+    "value" in (parsed as Record<string, unknown>)
+  ) {
+    return unwrapAuditValue((parsed as Record<string, unknown>).value);
+  }
+  return parsed;
+};
 
 const formatAuditValue = (value: unknown, context: DisplayContext): string | undefined => {
+  value = unwrapAuditValue(value);
   if (value == null) return undefined;
   if (typeof value === "string") return humanizeText(value, context);
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -288,6 +323,63 @@ const formatAuditValue = (value: unknown, context: DisplayContext): string | und
       .join("; ");
   }
   return String(value);
+};
+
+const comparableAuditValue = (value: unknown) => JSON.stringify(unwrapAuditValue(value));
+
+const formatAuditFieldValue = (key: string, value: unknown, context: DisplayContext) => {
+  const parsed = unwrapAuditValue(value);
+  if (typeof parsed === "number") {
+    if (/rate|percentage/i.test(key)) return `${parsed}%`;
+    if (/amount|value|commission|paid/i.test(key)) return fmtCurrency(parsed);
+  }
+  if (typeof parsed === "string" && /(_at|_date|date)$/i.test(key)) {
+    const date = new Date(parsed);
+    if (!Number.isNaN(date.getTime())) return date.toLocaleString();
+  }
+  return formatAuditValue(parsed, context)?.replace(/[.!?]+$/g, "");
+};
+
+const describeAuditChanges = (
+  oldValue: unknown,
+  newValue: unknown,
+  context: DisplayContext,
+): string[] => {
+  const oldParsed = unwrapAuditValue(oldValue);
+  const newParsed = unwrapAuditValue(newValue);
+  const oldObject =
+    oldParsed && typeof oldParsed === "object" && !Array.isArray(oldParsed)
+      ? (oldParsed as Record<string, unknown>)
+      : null;
+  const newObject =
+    newParsed && typeof newParsed === "object" && !Array.isArray(newParsed)
+      ? (newParsed as Record<string, unknown>)
+      : null;
+
+  if (!oldObject && !newObject) {
+    const before = formatAuditValue(oldParsed, context);
+    const after = formatAuditValue(newParsed, context);
+    if (before && after && before !== after) return [`Value changed from ${before} to ${after}.`];
+    if (after) return [`Recorded as ${after}.`];
+    if (before) return [`Removed ${before}.`];
+    return [];
+  }
+
+  const keys = new Set([...Object.keys(oldObject || {}), ...Object.keys(newObject || {})]);
+  return [...keys]
+    .filter((key) => !internalAuditKeys.has(key))
+    .filter(
+      (key) => comparableAuditValue(oldObject?.[key]) !== comparableAuditValue(newObject?.[key]),
+    )
+    .slice(0, 12)
+    .map((key) => {
+      const before = formatAuditFieldValue(key, oldObject?.[key], context);
+      const after = formatAuditFieldValue(key, newObject?.[key], context);
+      const field = labelKey(key);
+      if (before && after) return `${field} changed from ${before} to ${after}.`;
+      if (after) return `${field} set to ${after}.`;
+      return `${field} was removed${before ? ` (previously ${before})` : ""}.`;
+    });
 };
 
 const stringifyValue = (value: unknown) => {
@@ -503,11 +595,12 @@ function mapActivity(row: any): ActivityEntry {
 }
 
 function mapNotification(row: any, context: DisplayContext): Notification {
-  const payout = [...context.payouts.entries()].find(([id]) => String(row.body || "").includes(id));
-  let body = humanizeText(String(row.body || ""), context);
-  if (payout && row.title === "Payout request submitted") {
-    body = `${payout[1].label} totaling ${fmtCurrency(payout[1].amount)}.`;
-  } else if (/^[0-9a-f-]{30,}$/i.test(body)) {
+  const rawBody = String(row.body || "").trim();
+  const payout = [...context.payouts.entries()].find(([id]) => rawBody.includes(id));
+  let body = humanizeText(rawBody, context).replace(/\s+->\s+/g, " moved to ");
+  if (payout && ["Payout request submitted", "New payout request"].includes(row.title)) {
+    body = `${payout[1].label} totaling ${fmtCurrency(payout[1].amount)} is ready for review.`;
+  } else if (/^[0-9a-f-]{30,}$/i.test(rawBody)) {
     const fallback: Record<string, string> = {
       "Invitation revoked": "The pending invitation was revoked.",
       "Account suspended": "The selected portal account was suspended.",
@@ -541,15 +634,20 @@ function mapAnnouncement(row: any, reads: any[]): Announcement {
 
 function mapAudit(row: any, context: DisplayContext): AuditEntry {
   const rawDetail = row.record_name || row.record_id || `${row.action} in ${row.module}`;
+  const details =
+    row.action === "Settings Updated"
+      ? "Portal configuration"
+      : humanizeText(String(rawDetail), context);
   return {
     id: row.id,
     user: row.actor_name,
     action: row.action,
     module: row.module,
     date: row.created_at,
-    details: humanizeText(String(rawDetail), context),
+    details,
     oldValue: formatAuditValue(row.old_value, context),
     newValue: formatAuditValue(row.new_value, context),
+    changes: describeAuditChanges(row.old_value, row.new_value, context),
   };
 }
 
@@ -758,7 +856,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       invitations: invitationsRes.data || [],
     });
 
-    setPartners((partnersRes.data || []).map(mapPartner));
+    setPartners((partnersRes.data || []).filter((row: any) => !row.deleted_at).map(mapPartner));
     setLeads((leadsRes.data || []).map(mapLead));
     setCommissions((commissionsRes.data || []).map(mapCommission));
     setPayouts((payoutRequestsRes.data || []).map((row) => mapPayout(row, payoutItems)));
@@ -851,8 +949,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
   };
 
-  const pushAudit = (entry: Omit<AuditEntry, "id" | "date">) => {
-    setAudit((a) => [{ ...entry, id: uid("AU"), date: nowIso() }, ...a]);
+  const pushAudit = (entry: Omit<AuditEntry, "id" | "date" | "changes">) => {
+    const context = { labels: new Map<string, string>(), payouts: new Map() };
+    setAudit((a) => [
+      {
+        ...entry,
+        id: uid("AU"),
+        date: nowIso(),
+        changes: describeAuditChanges(entry.oldValue, entry.newValue, context),
+      },
+      ...a,
+    ]);
     if (!realMode || !supabase) return;
     if (entry.action === "Lead Submitted") return;
     void supabase
