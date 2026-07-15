@@ -100,10 +100,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const { notifications, markNotificationRead, markAllNotificationsRead } = useStore();
   if (!user) return null;
-  const nav =
-    user.role === "partner" && user.agreementsComplete === false
-      ? PARTNER_NAV.filter((item) => ["/profile", "/onboarding"].includes(item.to))
-      : getNav(user.role);
+  const nav = getNav(user.role);
   const unread = notifications.filter((n) => !n.read).length;
   const selectedNotification =
     notifications.find((notification) => notification.id === selectedNotificationId) || null;
@@ -124,17 +121,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div
           className={`flex h-16 items-center gap-2 border-b border-sidebar-border ${collapsed ? "justify-center px-3" : "px-4 sm:px-5"}`}
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-gradient-brand text-brand-foreground font-bold">
-            G
+          <div className={collapsed ? "h-9 w-9 shrink-0 overflow-hidden" : "min-w-0 shrink"}>
+            <img
+              src="/goaccelovate-logo.png"
+              alt="GoAccelovate"
+              className={
+                collapsed ? "h-9 w-auto max-w-none" : "h-8 w-auto max-w-[168px] object-contain"
+              }
+            />
           </div>
-          {!collapsed && (
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold leading-tight">Go Accelerate</div>
-              <div className="truncate text-[11px] uppercase tracking-wider text-sidebar-foreground/60">
-                Global Partner Program
-              </div>
-            </div>
-          )}
           <Button
             variant="ghost"
             size="icon"
@@ -204,7 +199,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <PanelLeftOpen className="h-4 w-4" />
             </Button>
           ) : (
-            "Global Partner Program"
+            "www.goaccelovate.com"
           )}
         </div>
       </aside>

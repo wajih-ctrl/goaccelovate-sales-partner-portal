@@ -244,6 +244,7 @@ export const Route = createFileRoute("/api/invitations")({
           }
         }
 
+        const agreementSignedAt = new Date().toISOString();
         const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
         const { data: invitation, error: invitationError } = await (service as any)
           .from("invitations")
@@ -254,6 +255,9 @@ export const Route = createFileRoute("/api/invitations")({
             commission_rate: parsed.commissionRate,
             partner_id: partnerId,
             invited_by: actor.id,
+            agreement_signer_name: actor.full_name || authUser.email || "GoAccelovate Admin",
+            agreement_signer_role: actor.role,
+            agreement_signed_at: agreementSignedAt,
             token_hash: crypto.randomUUID(),
             expires_at: expiresAt,
           })
@@ -271,6 +275,8 @@ export const Route = createFileRoute("/api/invitations")({
           email: parsed.email,
           role: parsed.role,
           partnerId,
+          agreementSignerName: actor.full_name || authUser.email,
+          agreementSignedAt,
           createdAt: invitation.created_at,
           expiresAt: invitation.expires_at,
         });

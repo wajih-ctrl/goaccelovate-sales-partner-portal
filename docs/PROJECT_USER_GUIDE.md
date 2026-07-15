@@ -1,4 +1,4 @@
-# Go Accelerate Global Partner Program Guide
+# GoAccelovate Global Partner Program Guide
 
 This guide explains the approved portal workflow for Super Admins, Admins, and Sales Partners.
 
@@ -14,12 +14,14 @@ Authentication uses real Supabase Auth accounts. No demo login is included in pr
 
 Admin and Super Admin can invite a Sales Partner. A commission percentage is required before sending the invitation. Only Super Admin can invite an Admin, revoke/delete an invitation, change roles, suspend, reinstate, or deactivate an account.
 
-New Sales Partners cannot enter the operating portal until they sign the current Partner Agreement and NDA:
+Sending a Sales Partner invitation countersigns the Agreement and NDA with the inviting Admin or Super Admin's name, role, and invitation date. This immutable signer snapshot remains part of the partner's generated documents even if the inviter's profile is later renamed.
+
+New Sales Partners land on their dashboard after signing in. Onboarding remains available in the sidebar, while lead submission stays locked until the current Partner Agreement and NDA are signed:
 
 1. Super Admin publishes secure PDF URLs in Settings.
 2. The invitation recipient sets a password and opens onboarding.
 3. The partner reads both documents, enters their legal name, confirms the e-signature, and signs.
-4. The portal records the user, partner, document version, signer name, and timestamp, then automatically completes the Agreement and NDA onboarding steps and opens portal access.
+4. The portal records the user, partner, document version, signer name, and timestamp, then automatically completes the Agreement and NDA onboarding steps.
 5. The partner reviews and acknowledges the GoAccelovate Welcome Kit in Onboarding. The acknowledgement is stored and audited.
 6. Publishing a new document version requires affected partners to sign again and automatically reopens the two legal onboarding steps.
 
@@ -34,7 +36,7 @@ Partners open `My Leads` and use the top-right `Submit Lead` button. The form in
 Validation and duplicate detection run server-side:
 
 - Invalid or incomplete forms are not saved.
-- A matching company name or contact email is saved as `Duplicate Rejected` and does not enter the active pipeline.
+- A matching contact email or normalized phone number is rejected before a lead record is created. Company name alone is not treated as a duplicate.
 - A valid lead enters `Identified Opportunity` immediately and Admin users are notified.
 
 Partners can view their leads as a table or Kanban board, edit estimated value before the commercial stages, move only partner-controlled stages, add public updates, and delete their own lead while no commission exists.
@@ -73,7 +75,7 @@ Client payment details are Admin-only. Admin records either:
 
 Recording an eligible payment releases the proportional commission amount. An advance payment releases only its share; the final payment releases the remaining share up to the calculated commission total. Partners see earned, payable/pending, and paid commission amounts, but never the client's payment records.
 
-The partner selects payable commission items in `My Commissions` and requests one payout. Admin approves or rejects it with a reason. After external payment, Admin records the date, method, and transaction reference. The commission paid balance and partner notification update atomically.
+The partner selects payable commission items in `My Commissions` and requests one payout. Admin approves or rejects it with a reason. After external payment, Admin records the exact approved amount, date, method, and transaction reference. The commission paid balance, payout history, audit entry, and partner notification update atomically.
 
 Commission disputes and the separate payout navigation are not part of this program version.
 

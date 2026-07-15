@@ -143,19 +143,19 @@ interface AppActions {
     commissionIds: string[],
     message: string,
     actor: string,
-  ) => void;
-  approvePayout: (payoutId: string, actor: string) => void;
-  rejectPayout: (payoutId: string, reason: string, actor: string) => void;
+  ) => Promise<boolean>;
+  approvePayout: (payoutId: string, actor: string) => Promise<boolean>;
+  rejectPayout: (payoutId: string, reason: string, actor: string) => Promise<boolean>;
   recordPayoutPayment: (
     payoutId: string,
-    payload: { method: string; reference: string; date: string },
+    payload: { amount: number; method: string; reference: string; date: string },
     actor: string,
-  ) => void;
+  ) => Promise<boolean>;
   // Client payments
   recordClientPayment: (
     payload: Omit<ClientPayment, "id"> & { triggerEligibility?: boolean },
     actor: string,
-  ) => void;
+  ) => Promise<boolean>;
   // Announcements
   publishAnnouncement: (a: Omit<Announcement, "id" | "date" | "readBy">, actor: string) => void;
   markAnnouncementRead: (id: string, partnerId: string) => void;
@@ -857,7 +857,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
 
     setPartners((partnersRes.data || []).filter((row: any) => !row.deleted_at).map(mapPartner));
-    setLeads((leadsRes.data || []).map(mapLead));
+    setLeads(
+      (leadsRes.data || []).filter((row: any) => row.status !== "Duplicate Rejected").map(mapLead),
+    );
     setCommissions((commissionsRes.data || []).map(mapCommission));
     setPayouts((payoutRequestsRes.data || []).map((row) => mapPayout(row, payoutItems)));
     setClientPayments((clientPaymentsRes.data || []).map(mapClientPayment));
@@ -1038,14 +1040,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           handleWriteError(error);
           throw error;
         }
-        const realLead = mapLead(data);
+        if (!data?.accepted || !data?.lead) {
+          const duplicateError = new Error(
+            data?.reason || "A lead with this contact email or phone number already exists.",
+          );
+          duplicateError.name = "DuplicateLeadError";
+          throw duplicateError;
+        }
+        const realLead = mapLead(data.lead);
         setLeads((prev) => [realLead, ...prev.filter((item) => item.id !== realLead.id)]);
         reloadAfterWrite();
         return realLead;
       }
 
+      if (l.isDuplicate) {
+        const duplicateError = new Error(
+          "A lead with this contact email or phone number already exists.",
+        );
+        duplicateError.name = "DuplicateLeadError";
+        throw duplicateError;
+      }
       const id = `L-${1100 + Math.floor(Math.random() * 9000)}`;
-      const status: LeadStatus = l.isDuplicate ? "Duplicate Rejected" : "Open";
+      const status: LeadStatus = "Open";
       const lead: Lead = {
         ...l,
         id,
@@ -1825,10 +1841,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const requestPayout: AppActions["requestPayout"] = useCallback(
-    (partnerId, commissionIds, message, actor) => {
+    async (partnerId, commissionIds, message, actor) => {
       const amount = commissions
         .filter((c) => commissionIds.includes(c.id))
         .reduce((s, c) => s + Math.max(0, (c.eligibleAmount || c.amount) - (c.paidAmount || 0)), 0);
+      if (amount <= 0) {
+        toast.error("Select at least one payable commission.");
+        return false;
+      }
+      if (realMode && supabase) {
+        const { error } = await supabase.rpc("request_commission_payout", {
+          commission_ids: commissionIds,
+          message,
+        });
+        if (error) {
+          handleWriteError(error, "Unable to submit the payout request.");
+          await refreshSupabaseState().catch(() => undefined);
+          return false;
+        }
+        await refreshSupabaseState().catch((error) =>
+          handleWriteError(error, "Payout submitted, but the latest data could not be refreshed."),
+        );
+        return true;
+      }
       const id = uid("PO");
       setPayouts((p) => [
         {
@@ -1856,20 +1891,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         body: `${id} · $${amount.toLocaleString()}`,
         type: "info",
       });
-      if (realMode && supabase) {
-        void supabase
-          .rpc("request_commission_payout", { commission_ids: commissionIds, message })
-          .then(({ error }) => {
-            if (error) handleWriteError(error);
-            reloadAfterWrite();
-          });
-      }
+      return true;
     },
-    [commissions, handleWriteError, realMode, reloadAfterWrite],
+    [commissions, handleWriteError, realMode, refreshSupabaseState],
   );
 
   const approvePayout: AppActions["approvePayout"] = useCallback(
-    (id, actor) => {
+    async (id, actor) => {
+      if (realMode && supabase) {
+        const { error } = await (supabase as any).rpc("review_payout_request", {
+          target_payout: id,
+          approve_request: true,
+          rejection_reason: null,
+        });
+        if (error) {
+          handleWriteError(error, "Unable to approve the payout request.");
+          await refreshSupabaseState().catch(() => undefined);
+          return false;
+        }
+        await refreshSupabaseState().catch((error) =>
+          handleWriteError(error, "Payout approved, but the latest data could not be refreshed."),
+        );
+        return true;
+      }
       setPayouts((prev) =>
         prev.map((p) => {
           if (p.id !== id) return p;
@@ -1886,27 +1930,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return { ...p, status: "Approved" };
         }),
       );
-      if (realMode && supabase) {
-        void (supabase as any)
-          .rpc("review_payout_request", {
-            target_payout: id,
-            approve_request: true,
-            rejection_reason: null,
-          })
-          .then(({ error }: { error: unknown }) => {
-            if (error) handleWriteError(error);
-            reloadAfterWrite();
-          });
-      }
+      return true;
     },
-    [handleWriteError, notifyPartner, payouts, realMode, reloadAfterWrite, user?.id],
+    [handleWriteError, realMode, refreshSupabaseState],
   );
 
   const rejectPayout: AppActions["rejectPayout"] = useCallback(
-    (id, reason, actor) => {
+    async (id, reason, actor) => {
       if (!reason.trim()) {
         toast.error("A rejection reason is required.");
-        return;
+        return false;
+      }
+      if (realMode && supabase) {
+        const { error } = await (supabase as any).rpc("review_payout_request", {
+          target_payout: id,
+          approve_request: false,
+          rejection_reason: reason.trim(),
+        });
+        if (error) {
+          handleWriteError(error, "Unable to reject the payout request.");
+          await refreshSupabaseState().catch(() => undefined);
+          return false;
+        }
+        await refreshSupabaseState().catch((error) =>
+          handleWriteError(error, "Payout rejected, but the latest data could not be refreshed."),
+        );
+        return true;
       }
       setPayouts((prev) =>
         prev.map((p) => {
@@ -1929,27 +1978,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return { ...p, status: "Rejected", rejectReason: reason };
         }),
       );
-      if (realMode && supabase) {
-        void (supabase as any)
-          .rpc("review_payout_request", {
-            target_payout: id,
-            approve_request: false,
-            rejection_reason: reason.trim(),
-          })
-          .then(({ error }: { error: unknown }) => {
-            if (error) handleWriteError(error);
-            reloadAfterWrite();
-          });
-      }
+      return true;
     },
-    [handleWriteError, notifyPartner, payouts, realMode, reloadAfterWrite],
+    [handleWriteError, realMode, refreshSupabaseState],
   );
 
   const recordPayoutPayment: AppActions["recordPayoutPayment"] = useCallback(
-    (id, payload, actor) => {
-      if (!payload.date || !payload.method.trim() || !payload.reference.trim()) {
-        toast.error("Payment date, method, and transaction reference are required.");
-        return;
+    async (id, payload, actor) => {
+      if (
+        !payload.date ||
+        !payload.method.trim() ||
+        !payload.reference.trim() ||
+        !Number.isFinite(payload.amount) ||
+        payload.amount <= 0
+      ) {
+        toast.error("Payment amount, date, method, and transaction reference are required.");
+        return false;
+      }
+      const payout = payouts.find((item) => item.id === id);
+      if (!payout || Math.abs(payload.amount - payout.amount) > 0.005) {
+        toast.error("The paid amount must match the approved payout amount.");
+        return false;
+      }
+      if (realMode && supabase) {
+        const { error } = await (supabase as any).rpc("record_payout_paid", {
+          target_payout: id,
+          payment_amount: payload.amount,
+          paid_on: payload.date,
+          method: payload.method,
+          reference: payload.reference,
+        });
+        if (error) {
+          handleWriteError(error, "Unable to confirm the external payout.");
+          await refreshSupabaseState().catch(() => undefined);
+          return false;
+        }
+        await refreshSupabaseState().catch((error) =>
+          handleWriteError(error, "Payout confirmed, but the latest data could not be refreshed."),
+        );
+        return true;
       }
       setPayouts((prev) =>
         prev.map((p) => {
@@ -1986,25 +2053,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           };
         }),
       );
-      if (realMode && supabase) {
-        const payout = payouts.find((p) => p.id === id);
-        void (async () => {
-          const { error: payoutError } = await (supabase as any).rpc("record_payout_paid", {
-            target_payout: id,
-            paid_on: payload.date,
-            method: payload.method,
-            reference: payload.reference,
-          });
-          if (payoutError) handleWriteError(payoutError);
-          reloadAfterWrite();
-        })();
-      }
+      return true;
     },
-    [handleWriteError, notifyPartner, payouts, realMode, reloadAfterWrite],
+    [handleWriteError, payouts, realMode, refreshSupabaseState],
   );
 
   const recordClientPayment: AppActions["recordClientPayment"] = useCallback(
-    (payload, actor) => {
+    async (payload, actor) => {
+      if (realMode && supabase) {
+        const { error } = await (supabase as any).rpc("record_client_payment_and_eligibility", {
+          target_lead: payload.leadId,
+          payment_amount: payload.amount,
+          payment_date: payload.date,
+          payment_reference: payload.reference,
+          payment_method: payload.method,
+          payment_type: payload.paymentType,
+          payment_notes: payload.notes || null,
+        });
+        if (error) {
+          handleWriteError(error, "Unable to record the client payment.");
+          await refreshSupabaseState().catch(() => undefined);
+          return false;
+        }
+        await refreshSupabaseState().catch((error) =>
+          handleWriteError(error, "Payment recorded, but the latest data could not be refreshed."),
+        );
+        return true;
+      }
       const released = commissions.filter(
         (commission) => commission.leadId === payload.leadId && commission.state !== "Waived",
       );
@@ -2058,26 +2133,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           type: "success",
         });
       }
-      if (realMode && supabase) {
-        void (async () => {
-          const { error: paymentError } = await (supabase as any).rpc(
-            "record_client_payment_and_eligibility",
-            {
-              target_lead: payload.leadId,
-              payment_amount: payload.amount,
-              payment_date: payload.date,
-              payment_reference: payload.reference,
-              payment_method: payload.method,
-              payment_type: payload.paymentType,
-              payment_notes: payload.notes || null,
-            },
-          );
-          if (paymentError) handleWriteError(paymentError);
-          reloadAfterWrite();
-        })();
-      }
+      return true;
     },
-    [commissions, handleWriteError, leads, notifyPartner, realMode, reloadAfterWrite, user?.id],
+    [commissions, handleWriteError, realMode, refreshSupabaseState],
   );
 
   const publishAnnouncement: AppActions["publishAnnouncement"] = useCallback(

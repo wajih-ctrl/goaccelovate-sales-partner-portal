@@ -29,6 +29,7 @@ function Payouts() {
   const [payId, setPayId] = useState<string | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
   const [pay, setPay] = useState({
+    amount: "",
     method: "Bank Transfer",
     reference: "",
     date: new Date().toISOString().slice(0, 10),
@@ -92,9 +93,9 @@ function Payouts() {
                           <>
                             <Button
                               size="sm"
-                              onClick={() => {
-                                approvePayout(p.id, user!.name);
-                                toast.success(`${p.id} approved`);
+                              onClick={async () => {
+                                const approved = await approvePayout(p.id, user!.name);
+                                if (approved) toast.success("Payout request approved");
                               }}
                             >
                               Approve
@@ -105,7 +106,13 @@ function Payouts() {
                           </>
                         )}
                         {!isPartner && p.status === "Approved" && (
-                          <Button size="sm" onClick={() => setPayId(p.id)}>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setPayId(p.id);
+                              setPay((current) => ({ ...current, amount: String(p.amount) }));
+                            }}
+                          >
                             Mark paid
                           </Button>
                         )}
@@ -139,9 +146,10 @@ function Payouts() {
         title={`Reject payout ${rejectId || ""}`}
         description="Provide a reason. The partner will see this explanation."
         confirmLabel="Reject payout"
-        onConfirm={(reason) => {
-          rejectPayout(rejectId!, reason, user!.name);
-          toast.warning(`${rejectId} rejected`);
+        onConfirm={async (reason) => {
+          const rejected = await rejectPayout(rejectId!, reason, user!.name);
+          if (!rejected) return;
+          toast.warning("Payout request rejected");
           setRejectId(null);
         }}
       />
@@ -150,19 +158,36 @@ function Payouts() {
         open={!!payId}
         onOpenChange={(b) => !b && setPayId(null)}
         title={`Record payment for ${payId || ""}`}
-        canSubmit={!!pay.reference.trim() && !!pay.date}
+        canSubmit={Number(pay.amount) > 0 && !!pay.reference.trim() && !!pay.date}
         submitLabel="Record payment"
-        onSubmit={() => {
-          recordPayoutPayment(payId!, pay, user!.name);
-          toast.success(`${payId} marked as paid`);
+        onSubmit={async () => {
+          const recorded = await recordPayoutPayment(
+            payId!,
+            { ...pay, amount: Number(pay.amount) },
+            user!.name,
+          );
+          if (!recorded) return;
+          toast.success("External payout confirmed");
           setPayId(null);
           setPay({
+            amount: "",
             method: "Bank Transfer",
             reference: "",
             date: new Date().toISOString().slice(0, 10),
           });
         }}
       >
+        <label className="text-xs">
+          Amount paid
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+            value={pay.amount}
+            onChange={(e) => setPay({ ...pay, amount: e.target.value })}
+          />
+        </label>
         <label className="text-xs">
           Payment date
           <input

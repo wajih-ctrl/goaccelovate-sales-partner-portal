@@ -107,7 +107,7 @@ function Onboarding() {
     <>
       <PageHeader
         title="Partner Onboarding"
-        description="Complete the required documents before accessing program data."
+        description="Finish your partner setup and start building your pipeline."
       />
       <PageContainer>
         {user.agreementsComplete === false && (
@@ -218,11 +218,14 @@ function Onboarding() {
             <ul className="space-y-2">
               {ONBOARDING_STEPS.map((step) => {
                 const complete = status[step.key];
-                return (
-                  <li
-                    key={step.key}
-                    className={`flex items-center gap-3 rounded-md border p-3 ${complete ? "border-success/20 bg-success/5" : ""}`}
-                  >
+                const destination =
+                  step.key === "profile"
+                    ? ("/profile" as const)
+                    : step.key === "firstLead"
+                      ? ("/submit-lead" as const)
+                      : null;
+                const content = (
+                  <>
                     {complete ? (
                       <CheckCircle2 className="h-5 w-5 text-success" />
                     ) : (
@@ -231,6 +234,23 @@ function Onboarding() {
                     <span className={complete ? "text-foreground" : "text-muted-foreground"}>
                       {step.label}
                     </span>
+                  </>
+                );
+                return (
+                  <li
+                    key={step.key}
+                    className={`rounded-md border ${complete ? "border-success/20 bg-success/5" : ""}`}
+                  >
+                    {destination ? (
+                      <Link
+                        to={destination}
+                        className="flex items-center gap-3 p-3 transition-colors hover:bg-accent/30"
+                      >
+                        {content}
+                      </Link>
+                    ) : (
+                      <div className="flex items-center gap-3 p-3">{content}</div>
+                    )}
                   </li>
                 );
               })}

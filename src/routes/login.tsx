@@ -36,20 +36,14 @@ function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
       <div className="hidden flex-1 bg-sidebar text-sidebar-foreground lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gradient-brand font-bold text-brand-foreground">
-            G
-          </div>
-          <div>
-            <div className="text-base font-semibold">GoAccelovate</div>
-            <div className="text-xs uppercase tracking-widest text-sidebar-foreground/60">
-              Go Accelerate Global Partner Program
-            </div>
-          </div>
-        </div>
+        <img
+          src="/goaccelovate-logo.png"
+          alt="GoAccelovate"
+          className="h-10 w-auto max-w-[240px] object-contain"
+        />
         <div className="max-w-md">
           <h2 className="text-3xl font-semibold leading-tight">
-            The private operating system for the Global Trade Partner Program.
+            The private operating system for the Global Partner Program.
           </h2>
           <p className="mt-4 text-sm text-sidebar-foreground/70">
             Manage partners, leads, pipeline, commissions and payouts in one elegant workspace built
@@ -62,11 +56,12 @@ function LoginPage() {
       <div className="flex flex-1 items-center justify-center p-6 md:p-12">
         <div className="w-full max-w-md space-y-6">
           <div className="lg:hidden">
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-md bg-gradient-brand font-bold text-brand-foreground">
-                G
-              </div>
-              <span className="font-semibold">GoAccelovate</span>
+            <div className="inline-flex bg-black px-3 py-2">
+              <img
+                src="/goaccelovate-logo.png"
+                alt="GoAccelovate"
+                className="h-7 w-auto max-w-[190px] object-contain"
+              />
             </div>
           </div>
           <div>

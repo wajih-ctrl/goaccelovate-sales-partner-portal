@@ -33,7 +33,7 @@ const service = createClient(url, serviceKey, {
 const stamp = `${Date.now()}-${randomBytes(3).toString("hex")}`;
 const password = `Flow!${randomBytes(18).toString("base64url")}9a`;
 const createdUserIds = [];
-const seeded = { payoutIds: [] };
+const seeded = { payoutIds: [], extraLeadIds: [] };
 
 async function must(promise, label) {
   const result = await promise;
@@ -109,6 +109,9 @@ async function resetLead(stage = "Identified Opportunity", previousStage = null)
 }
 
 async function cleanup() {
+  if (seeded.invitationId) {
+    await service.from("invitations").delete().eq("id", seeded.invitationId);
+  }
   if (seeded.partnerId) {
     await service.from("notifications").delete().eq("partner_id", seeded.partnerId);
   }
@@ -124,6 +127,9 @@ async function cleanup() {
     await service.from("lead_activity_log").delete().eq("lead_id", seeded.leadId);
     await service.from("commissions").delete().eq("lead_id", seeded.leadId);
     await service.from("leads").delete().eq("id", seeded.leadId);
+  }
+  if (seeded.extraLeadIds.length) {
+    await service.from("leads").delete().in("id", seeded.extraLeadIds);
   }
   for (const userId of createdUserIds) await service.auth.admin.deleteUser(userId);
   if (seeded.partnerId) {
@@ -154,6 +160,26 @@ try {
     service.from("profiles").update({ partner_id: partner.id }).eq("id", partnerAccount.id),
     "Link partner profile",
   );
+  const invitationSignedAt = new Date().toISOString();
+  const invitation = await must(
+    service
+      .from("invitations")
+      .insert({
+        email: partnerAccount.email,
+        role: "partner",
+        partner_id: partner.id,
+        invited_by: adminAccount.id,
+        agreement_signer_name: "Flow admin",
+        agreement_signer_role: "admin",
+        agreement_signed_at: invitationSignedAt,
+        token_hash: `flow-${stamp}`,
+        expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      })
+      .select("id")
+      .single(),
+    "Create signed invitation snapshot",
+  );
+  seeded.invitationId = invitation.id;
   const lead = await must(
     service
       .from("leads")
@@ -181,6 +207,98 @@ try {
 
   const admin = await signIn(adminAccount);
   const partnerClient = await signIn(partnerAccount);
+
+  const agreementIssuers = await must(
+    partnerClient.rpc("get_current_partner_agreement_issuer"),
+    "Partner reads own agreement issuer",
+  );
+  await expectValue(agreementIssuers.length, 1, "Agreement issuer row count");
+  await expectValue(agreementIssuers[0].signer_name, "Flow admin", "Agreement issuer name");
+  await expectValue(agreementIssuers[0].signer_role, "admin", "Agreement issuer role");
+  const adminAgreementIssuers = await must(
+    admin.rpc("get_current_partner_agreement_issuer"),
+    "Admin agreement issuer isolation query",
+  );
+  await expectValue(
+    adminAgreementIssuers.length,
+    0,
+    "Admin cannot impersonate partner issuer read",
+  );
+
+  const companyOnlyMatchId = globalThis.crypto.randomUUID();
+  const companyOnlyMatch = await must(
+    partnerClient.rpc("submit_partner_lead", {
+      lead_id: companyOnlyMatchId,
+      company_name: `Flow Company ${stamp}`,
+      contact_name: "Second Flow Contact",
+      contact_title: "Director",
+      contact_email: `flow-company-only-${stamp}@example.com`,
+      contact_phone: "+1 (202) 555-0199",
+      client_linkedin: null,
+      country: "Pakistan",
+      industry: "Technology",
+      estimated_value: 1500,
+      currency: "USD",
+      description:
+        "This submission deliberately reuses only the company name to verify that the contact remains a valid new lead.",
+    }),
+    "Company-only match accepted",
+  );
+  await expectValue(companyOnlyMatch.accepted, true, "Company name is not a duplicate key");
+  seeded.extraLeadIds.push(companyOnlyMatchId);
+
+  const duplicateEmailId = globalThis.crypto.randomUUID();
+  const duplicateEmail = await must(
+    partnerClient.rpc("submit_partner_lead", {
+      lead_id: duplicateEmailId,
+      company_name: `Different Email Duplicate ${stamp}`,
+      contact_name: "Duplicate Contact",
+      contact_title: "Director",
+      contact_email: `flow-contact-${stamp}@example.com`,
+      contact_phone: "+1 202 555 0110",
+      client_linkedin: null,
+      country: "Pakistan",
+      industry: "Technology",
+      estimated_value: 1500,
+      currency: "USD",
+      description:
+        "This submission deliberately reuses a contact email and must be rejected without creating a pipeline record.",
+    }),
+    "Duplicate email rejected",
+  );
+  await expectValue(duplicateEmail.accepted, false, "Duplicate email response");
+  const duplicateEmailRows = await must(
+    service.from("leads").select("id").eq("id", duplicateEmailId),
+    "Check duplicate email persistence",
+  );
+  await expectValue(duplicateEmailRows.length, 0, "Duplicate email creates no lead");
+
+  const duplicatePhoneId = globalThis.crypto.randomUUID();
+  const duplicatePhone = await must(
+    partnerClient.rpc("submit_partner_lead", {
+      lead_id: duplicatePhoneId,
+      company_name: `Different Phone Duplicate ${stamp}`,
+      contact_name: "Duplicate Contact",
+      contact_title: "Director",
+      contact_email: `flow-phone-duplicate-${stamp}@example.com`,
+      contact_phone: "12025550199",
+      client_linkedin: null,
+      country: "Pakistan",
+      industry: "Technology",
+      estimated_value: 1500,
+      currency: "USD",
+      description:
+        "This submission deliberately reuses a normalized phone number and must not create a lead record in the pipeline.",
+    }),
+    "Duplicate phone rejected",
+  );
+  await expectValue(duplicatePhone.accepted, false, "Duplicate phone response");
+  const duplicatePhoneRows = await must(
+    service.from("leads").select("id").eq("id", duplicatePhoneId),
+    "Check duplicate phone persistence",
+  );
+  await expectValue(duplicatePhoneRows.length, 0, "Duplicate phone creates no lead");
+
   const partnerStages = ["Outreach Started", "In Communication", "Discovery Call"];
   for (const stage of partnerStages) {
     await resetLead();
@@ -382,6 +500,7 @@ try {
   await must(
     admin.rpc("record_payout_paid", {
       target_payout: firstPayout.id,
+      payment_amount: 20,
       paid_on: new Date().toISOString().slice(0, 10),
       method: "Bank Transfer",
       reference: `PAYOUT-ADV-${stamp}`,
@@ -461,9 +580,20 @@ try {
     }),
     "Approve final payout",
   );
+  await expectError(
+    admin.rpc("record_payout_paid", {
+      target_payout: finalPayout.id,
+      payment_amount: 79,
+      paid_on: new Date().toISOString().slice(0, 10),
+      method: "Bank Transfer",
+      reference: `PAYOUT-WRONG-${stamp}`,
+    }),
+    "External payout amount must match approved amount",
+  );
   await must(
     admin.rpc("record_payout_paid", {
       target_payout: finalPayout.id,
+      payment_amount: 80,
       paid_on: new Date().toISOString().slice(0, 10),
       method: "Bank Transfer",
       reference: `PAYOUT-FINAL-${stamp}`,
@@ -532,6 +662,14 @@ try {
     if (!partnerNotifications.some((notification) => notification.title === title)) {
       throw new Error(`Missing partner notification: ${title}`);
     }
+  }
+
+  const adminNotifications = await must(
+    service.from("notifications").select("title").eq("recipient_id", adminAccount.id),
+    "Read Admin payout notifications",
+  );
+  if (!adminNotifications.some((notification) => notification.title === "New payout request")) {
+    throw new Error("Missing Admin notification: New payout request");
   }
 
   console.log("Pipeline and commercial workflow verification passed");

@@ -223,10 +223,6 @@ function LeadsPage() {
                         >
                           {lead.company}
                         </Link>
-                        <div className="text-[11px] text-muted-foreground">{lead.id}</div>
-                        {lead.status === "Duplicate Rejected" && (
-                          <StatusBadge status={lead.status} />
-                        )}
                       </td>
                       <td className="px-4 py-3">{lead.contactName}</td>
                       <td className="px-4 py-3">{lead.country}</td>

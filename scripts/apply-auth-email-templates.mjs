@@ -21,7 +21,7 @@ if (!projectRef) throw new Error("Unable to determine the Supabase project refer
 
 const template = (name) => readFileSync(resolve("supabase", "templates", name), "utf8");
 const payload = {
-  mailer_subjects_invite: "Welcome to the Go Accelerate Global Partner Program",
+  mailer_subjects_invite: "Welcome to the GoAccelovate Global Partner Program",
   mailer_templates_invite_content: template("invite.html"),
   mailer_subjects_recovery: "Reset your GoAccelovate portal password",
   mailer_templates_recovery_content: template("recovery.html"),

@@ -569,6 +569,9 @@ export type Database = {
       invitations: {
         Row: {
           accepted_at: string | null;
+          agreement_signed_at: string | null;
+          agreement_signer_name: string | null;
+          agreement_signer_role: Database["public"]["Enums"]["app_role"] | null;
           created_at: string;
           email: string;
           expires_at: string;
@@ -582,6 +585,9 @@ export type Database = {
         };
         Insert: {
           accepted_at?: string | null;
+          agreement_signed_at?: string | null;
+          agreement_signer_name?: string | null;
+          agreement_signer_role?: Database["public"]["Enums"]["app_role"] | null;
           created_at?: string;
           email: string;
           expires_at: string;
@@ -595,6 +601,9 @@ export type Database = {
         };
         Update: {
           accepted_at?: string | null;
+          agreement_signed_at?: string | null;
+          agreement_signer_name?: string | null;
+          agreement_signer_role?: Database["public"]["Enums"]["app_role"] | null;
           created_at?: string;
           email?: string;
           expires_at?: string;
@@ -1289,6 +1298,14 @@ export type Database = {
       current_user_role: {
         Args: never;
         Returns: Database["public"]["Enums"]["app_role"];
+      };
+      get_current_partner_agreement_issuer: {
+        Args: never;
+        Returns: {
+          signed_at: string;
+          signer_name: string;
+          signer_role: Database["public"]["Enums"]["app_role"];
+        }[];
       };
       is_admin: { Args: never; Returns: boolean };
       is_current_partner: { Args: { partner: string }; Returns: boolean };

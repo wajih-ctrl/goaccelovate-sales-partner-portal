@@ -244,7 +244,7 @@ otp_expiry = 3600
 # sender_name = "Admin"
 
 [auth.email.template.invite]
-subject = "Welcome to the Go Accelerate Global Partner Program"
+subject = "Welcome to the GoAccelovate Global Partner Program"
 content_path = "supabase/templates/invite.html"
 
 [auth.email.template.recovery]

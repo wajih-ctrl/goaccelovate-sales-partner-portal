@@ -294,7 +294,7 @@ function PartnerDash({ partnerId }: { partnerId: string }) {
     )
     .reduce((s, l) => s + l.estimatedValue, 0);
   const myComm = commissions.filter((c) => c.partnerId === partnerId);
-  const earned = myComm.reduce((s, c) => s + c.amount, 0);
+  const earned = myComm.reduce((sum, commission) => sum + (commission.eligibleAmount || 0), 0);
   const pending = myComm.reduce(
     (sum, commission) =>
       sum + Math.max(0, (commission.eligibleAmount || 0) - (commission.paidAmount || 0)),
@@ -359,7 +359,7 @@ function PartnerDash({ partnerId }: { partnerId: string }) {
             accent="bg-success/10 text-success"
           />
           <Stat
-            label="Commissions Earned"
+            label="Triggered Commissions"
             value={fmtCurrency(earned)}
             icon={DollarSign}
             hint={`${fmtCurrency(pending)} pending payout`}

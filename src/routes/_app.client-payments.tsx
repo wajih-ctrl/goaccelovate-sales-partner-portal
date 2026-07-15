@@ -23,6 +23,7 @@ function ClientPayments() {
       clientPayments.some((payment) => payment.leadId === lead.id),
   );
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const empty = {
     leadId: eligibleLeads[0]?.id || "",
     paymentType: "Advance" as "Advance" | "Final",
@@ -153,6 +154,7 @@ function ClientPayments() {
         title="Record client payment"
         submitLabel="Record payment"
         canSubmit={
+          !saving &&
           !!form.leadId &&
           !!form.amount &&
           !isNaN(Number(form.amount)) &&
@@ -161,8 +163,9 @@ function ClientPayments() {
           !!form.method.trim() &&
           !!form.date
         }
-        onSubmit={() => {
-          recordClientPayment(
+        onSubmit={async () => {
+          setSaving(true);
+          const saved = await recordClientPayment(
             {
               leadId: form.leadId,
               amount: Number(form.amount),
@@ -174,6 +177,8 @@ function ClientPayments() {
             },
             user!.name,
           );
+          setSaving(false);
+          if (!saved) return;
           toast.success(
             `${form.paymentType} payment recorded and commission eligibility triggered.`,
           );
@@ -202,13 +207,17 @@ function ClientPayments() {
           <select
             className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
             value={form.paymentType}
-            onChange={(event) =>
+            onChange={(event) => {
+              const paymentType = event.target.value as "Advance" | "Final";
+              const nextLead = eligibleLeads.find((lead) =>
+                canRecordClientPayment(paymentType, lead.stage),
+              );
               setForm({
                 ...form,
-                paymentType: event.target.value as "Advance" | "Final",
-                leadId: "",
-              })
-            }
+                paymentType,
+                leadId: nextLead?.id || "",
+              });
+            }}
           >
             <option>Advance</option>
             <option>Final</option>
@@ -266,8 +275,9 @@ function ClientPayments() {
           />
         </label>
         <div className="rounded-md border bg-accent/20 p-3 text-xs text-muted-foreground">
-          Confirmed client payments automatically trigger the proportional commission amount for
-          payout.
+          {saving
+            ? "Recording payment and calculating the payable commission..."
+            : "An advance releases commission on the advance received. A final payment releases the remaining commission."}
         </div>
       </FormDialog>
     </>

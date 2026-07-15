@@ -1,6 +1,6 @@
 import type { LeadStage, Role } from "./domain";
 
-export const PORTAL_NAME = "Go Accelerate Global Partner Program";
+export const PORTAL_NAME = "GoAccelovate Global Partner Program";
 
 export const LEAD_STAGES: LeadStage[] = [
   "Identified Opportunity",

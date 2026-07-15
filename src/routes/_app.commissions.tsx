@@ -33,7 +33,10 @@ function Commissions() {
   } = useStore();
   const isPartner = user?.role === "partner";
   const list = isPartner ? commissions.filter((c) => c.partnerId === user.partnerId) : commissions;
-  const earned = list.reduce((s, c) => s + c.amount, 0);
+  const earned = list.reduce(
+    (sum, commission) => sum + (isPartner ? commission.eligibleAmount || 0 : commission.amount),
+    0,
+  );
   const pending = list.reduce(
     (sum, commission) =>
       sum + Math.max(0, (commission.eligibleAmount || 0) - (commission.paidAmount || 0)),
@@ -126,7 +129,9 @@ function Commissions() {
       <PageContainer>
         <div className="grid gap-4 md:grid-cols-3">
           <Card className="p-5">
-            <div className="text-xs uppercase text-muted-foreground">Total earned</div>
+            <div className="text-xs uppercase text-muted-foreground">
+              {isPartner ? "Triggered earnings" : "Total commission"}
+            </div>
             <div className="mt-1 text-2xl font-semibold">{fmtCurrency(earned)}</div>
           </Card>
           <Card className="p-5">
@@ -483,8 +488,14 @@ function Commissions() {
         title="Request payout"
         submitLabel="Submit request"
         canSubmit={selectedCommissions.length > 0}
-        onSubmit={() => {
-          requestPayout(user!.partnerId!, selectedCommissions, payoutMessage.trim(), user!.name);
+        onSubmit={async () => {
+          const requested = await requestPayout(
+            user!.partnerId!,
+            selectedCommissions,
+            payoutMessage.trim(),
+            user!.name,
+          );
+          if (!requested) return;
           toast.success("Payout request submitted");
           setPayoutOpen(false);
           setSelectedCommissions([]);

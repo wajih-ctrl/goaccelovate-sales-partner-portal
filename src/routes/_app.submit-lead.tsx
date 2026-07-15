@@ -36,7 +36,7 @@ function SubmitLead() {
   const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState<{
-    id: string;
+    id?: string;
     duplicate: boolean;
     duplicateReason?: string;
   } | null>(null);
@@ -76,11 +76,12 @@ function SubmitLead() {
       toast.error("Please fix the errors below");
       return;
     }
-    const company = form.company.toLowerCase().trim();
     const email = form.contactEmail.toLowerCase().trim();
+    const phone = form.contactPhone.replace(/\D/g, "");
     const isDup = leads.some(
       (l) =>
-        l.company.toLowerCase().trim() === company || l.contactEmail.toLowerCase().trim() === email,
+        l.contactEmail.toLowerCase().trim() === email ||
+        (phone.length > 0 && l.contactPhone.replace(/\D/g, "") === phone),
     );
     try {
       const lead = await addLead(
@@ -112,14 +113,16 @@ function SubmitLead() {
         }
         setUploading(false);
       }
-      if (lead.status !== "Duplicate Rejected")
-        setOnboardingStep(user.partnerId!, "firstLead", true, user.name);
-      const duplicate = lead.status === "Duplicate Rejected";
-      setSubmitted({ id: lead.id, duplicate, duplicateReason: lead.duplicateReason });
-      if (duplicate) toast.warning(`${lead.id} was automatically rejected as a duplicate.`);
-      else toast.success(`${lead.id} submitted successfully and added to your pipeline.`);
+      setOnboardingStep(user.partnerId!, "firstLead", true, user.name);
+      setSubmitted({ id: lead.id, duplicate: false });
+      toast.success("Lead submitted successfully and added to your pipeline.");
     } catch (error) {
       setUploading(false);
+      if (error instanceof Error && error.name === "DuplicateLeadError") {
+        setSubmitted({ duplicate: true, duplicateReason: error.message });
+        toast.warning("Duplicate lead detected. Nothing was added to the pipeline.");
+        return;
+      }
       toast.error(error instanceof Error ? error.message : "Lead submission failed");
     }
   };
@@ -142,8 +145,8 @@ function SubmitLead() {
                 <AlertCircle className="mx-auto h-12 w-12 text-warning-foreground" />
                 <h2 className="mt-3 text-xl font-semibold">Duplicate lead rejected</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Lead <strong>{submitted.id}</strong> matches an existing company or contact email
-                  and was automatically rejected. It did not enter the pipeline.
+                  This contact email or phone number already exists. The duplicate was rejected and
+                  no lead record was added to the dashboard or pipeline.
                 </p>
                 {submitted.duplicateReason && (
                   <p className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-warning-foreground">
@@ -165,9 +168,11 @@ function SubmitLead() {
               <Button variant="outline" onClick={reset}>
                 Submit another
               </Button>
-              <Button onClick={() => nav({ to: "/leads/$id", params: { id: submitted.id } })}>
-                View lead
-              </Button>
+              {submitted.id && (
+                <Button onClick={() => nav({ to: "/leads/$id", params: { id: submitted.id! } })}>
+                  View lead
+                </Button>
+              )}
             </div>
           </Card>
         </PageContainer>

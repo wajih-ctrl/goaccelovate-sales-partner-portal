@@ -187,7 +187,7 @@ function Profile() {
                 <strong>Joined:</strong> {new Date(p.joinedDate).toLocaleDateString()}
               </div>
               <div className="mt-1 text-muted-foreground">
-                Commission rate and account manager are managed by Go Accelerate.
+                Commission rate and account manager are managed by GoAccelovate.
               </div>
             </div>
           </Card>

@@ -49,15 +49,16 @@ function Invitation() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
       <Card className="w-full max-w-lg space-y-5 p-8">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gradient-brand font-bold text-brand-foreground">
-            G
+        <div className="flex items-center justify-between gap-3 border-b pb-4">
+          <div className="inline-flex bg-black px-3 py-2">
+            <img
+              src="/goaccelovate-logo.png"
+              alt="GoAccelovate"
+              className="h-7 w-auto max-w-[190px] object-contain"
+            />
           </div>
-          <div>
-            <div className="text-sm font-semibold">Go Accelerate Global Partner Program</div>
-            <div className="text-xs text-muted-foreground">
-              {mode === "recovery" ? "Password reset" : "Partner invitation"}
-            </div>
+          <div className="text-xs text-muted-foreground">
+            {mode === "recovery" ? "Password reset" : "Partner invitation"}
           </div>
         </div>
         <h1 className="text-2xl font-semibold">

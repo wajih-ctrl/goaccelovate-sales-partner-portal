@@ -22,34 +22,49 @@ type AgreementAcceptance = {
   signed_at: string;
 };
 
+type AgreementIssuer = {
+  signer_name: string;
+  signer_role: "admin" | "super_admin";
+  signed_at: string;
+};
+
 function LegalDocumentPage() {
   const { type } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { partners } = useStore();
   const [acceptance, setAcceptance] = useState<AgreementAcceptance | null>(null);
-  const [acceptanceLoading, setAcceptanceLoading] = useState(user?.role === "partner");
+  const [issuer, setIssuer] = useState<AgreementIssuer | null>(null);
+  const [documentLoading, setDocumentLoading] = useState(user?.role === "partner");
 
   useEffect(() => {
     if (!supabase || user?.role !== "partner" || !user.partnerId) {
-      setAcceptanceLoading(false);
+      setDocumentLoading(false);
       return;
     }
 
     let cancelled = false;
     const documentType = type === "nda" ? "NDA" : "Agreement";
-    void (supabase as any)
-      .from("partner_agreement_acceptances")
-      .select("signer_name,signed_at,agreement_documents!inner(document_type,is_active)")
-      .eq("partner_id", user.partnerId)
-      .eq("agreement_documents.document_type", documentType)
-      .eq("agreement_documents.is_active", true)
-      .maybeSingle()
-      .then(({ data }: { data: AgreementAcceptance | null; error: { message: string } | null }) => {
-        if (!cancelled) {
-          setAcceptance(data);
-          setAcceptanceLoading(false);
-        }
+    void Promise.all([
+      (supabase as any)
+        .from("partner_agreement_acceptances")
+        .select("signer_name,signed_at,agreement_documents!inner(document_type,is_active)")
+        .eq("partner_id", user.partnerId)
+        .eq("agreement_documents.document_type", documentType)
+        .eq("agreement_documents.is_active", true)
+        .maybeSingle(),
+      (supabase as any).rpc("get_current_partner_agreement_issuer"),
+    ])
+      .then(([acceptanceResult, issuerResult]) => {
+        if (cancelled) return;
+        setAcceptance((acceptanceResult.data as AgreementAcceptance | null) || null);
+        const issuerRows = issuerResult.data as AgreementIssuer[] | null;
+        setIssuer(issuerRows?.[0] || null);
+        setDocumentLoading(false);
+      })
+      .catch((error: unknown) => {
+        console.error("Unable to load agreement signature details", error);
+        if (!cancelled) setDocumentLoading(false);
       });
 
     return () => {
@@ -60,7 +75,7 @@ function LegalDocumentPage() {
   if (type !== "agreement" && type !== "nda") return <Navigate to="/onboarding" replace />;
 
   const partner = partners.find((item) => item.id === user?.partnerId);
-  if (user?.role === "partner" && user.partnerId && (!partner || acceptanceLoading)) {
+  if (user?.role === "partner" && user.partnerId && (!partner || documentLoading)) {
     return (
       <>
         <PageHeader title="Preparing document" description="Loading your current partner terms." />
@@ -72,7 +87,22 @@ function LegalDocumentPage() {
   }
   const partnerName = partner?.name || (user?.role === "partner" ? user.name : "Sales Partner");
   const commissionRate = partner?.commissionRate || 10;
-  const effectiveDate = new Date(partner?.joinedDate || Date.now()).toLocaleDateString(undefined, {
+  const effectiveDate = new Date(
+    issuer?.signed_at || partner?.joinedDate || Date.now(),
+  ).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const goAccelovateSignerName = issuer?.signer_name || LEGAL_DEFAULTS.goAccelovateSignatoryName;
+  const goAccelovateSignerTitle = issuer
+    ? issuer.signer_role === "super_admin"
+      ? "Super Admin"
+      : "Admin"
+    : LEGAL_DEFAULTS.goAccelovateSignatoryTitle;
+  const goAccelovateSignedDate = new Date(
+    issuer?.signed_at || partner?.joinedDate || Date.now(),
+  ).toLocaleDateString(undefined, {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -163,10 +193,13 @@ function LegalDocumentPage() {
               <div className="grid gap-8 sm:grid-cols-2">
                 <div className="space-y-3 text-sm">
                   <div className="font-semibold">For GoAccelovate</div>
-                  <div>Name: {LEGAL_DEFAULTS.goAccelovateSignatoryName}</div>
-                  <div>Title: {LEGAL_DEFAULTS.goAccelovateSignatoryTitle}</div>
-                  <div className="pt-5">Signature: _________________________</div>
-                  <div>Date: _________________________</div>
+                  <div>Name: {goAccelovateSignerName}</div>
+                  <div>Title: {goAccelovateSignerTitle}</div>
+                  <div className="pt-5">
+                    Electronic signature:{" "}
+                    <span className="font-serif text-base italic">{goAccelovateSignerName}</span>
+                  </div>
+                  <div>Date: {goAccelovateSignedDate}</div>
                 </div>
                 <div className="space-y-3 text-sm">
                   <div className="font-semibold">For {partnerName}</div>
