@@ -54,6 +54,19 @@ function mapProfile(profile: ProfileRow): User {
   };
 }
 
+function samePortalUser(current: User | null, next: User) {
+  return (
+    current?.id === next.id &&
+    current.name === next.name &&
+    current.email === next.email &&
+    current.role === next.role &&
+    current.partnerId === next.partnerId &&
+    current.avatar === next.avatar &&
+    current.accountStatus === next.accountStatus &&
+    current.agreementsComplete === next.agreementsComplete
+  );
+}
+
 async function loadSupabaseUser(verifyRemote = false): Promise<User | null> {
   if (!supabase) return null;
 
@@ -105,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthMode(null);
         return false;
       }
-      setUser(nextUser);
+      setUser((current) => (samePortalUser(current, nextUser) ? current : nextUser));
       setAuthMode("supabase");
       return true;
     } catch (error) {

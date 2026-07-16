@@ -19,7 +19,6 @@ import {
   ShieldCheck,
   UserCircle,
   ClipboardCheck,
-  FileSignature,
   Bell,
   Search,
   LogOut,
@@ -82,7 +81,8 @@ const PARTNER_NAV: NavItem[] = [
 ];
 
 const PARTNER_AGREEMENT_NAV: NavItem[] = [
-  { to: "/onboarding", label: "Agreement & NDA", icon: FileSignature },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/onboarding", label: "Onboarding", icon: ClipboardCheck },
 ];
 
 function getNav(user: User): NavItem[] {

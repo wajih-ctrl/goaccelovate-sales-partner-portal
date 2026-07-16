@@ -19,6 +19,7 @@ import {
   Briefcase,
   ArrowUpRight,
   FileText,
+  FileSignature,
   type LucideIcon,
 } from "lucide-react";
 
@@ -58,8 +59,43 @@ function Stat({ label, value, icon: Icon, hint, accent }: StatProps) {
 function Dashboard() {
   const { user } = useAuth();
   if (!user) return null;
+  if (user.role === "partner" && user.agreementsComplete !== true)
+    return <PartnerAgreementDashboard />;
   if (user.role === "partner") return <PartnerDash partnerId={user.partnerId!} />;
   return <AdminDash />;
+}
+
+function PartnerAgreementDashboard() {
+  return (
+    <>
+      <PageHeader
+        title="My Dashboard"
+        description="Welcome to the GoAccelovate Global Partner Program."
+      />
+      <PageContainer>
+        <Card className="max-w-3xl space-y-4 p-5 shadow-card">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-brand/10 text-brand">
+              <FileSignature className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="font-semibold">Complete your onboarding</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Review and sign the Partner Agreement and NDA to activate leads, pipeline,
+                commissions, announcements, and reports.
+              </p>
+            </div>
+          </div>
+          <Link to="/onboarding">
+            <Button>
+              <FileSignature className="mr-2 h-4 w-4" />
+              Open Onboarding
+            </Button>
+          </Link>
+        </Card>
+      </PageContainer>
+    </>
+  );
 }
 
 function AdminDash() {

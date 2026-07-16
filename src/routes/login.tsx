@@ -30,7 +30,7 @@ function LoginPage() {
     }
 
     toast.success("Signed in");
-    navigate({ to: result.requiresAgreement ? "/onboarding" : "/dashboard" });
+    navigate({ to: "/dashboard", replace: true });
   };
 
   return (

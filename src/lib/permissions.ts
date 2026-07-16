@@ -29,7 +29,7 @@ const PARTNER_PATHS = [
 ];
 
 const SUPER_ADMIN_ONLY_PATHS = ["/audit-log", "/settings"];
-const PARTNER_PRE_AGREEMENT_PATHS = ["/onboarding", "/legal"];
+const PARTNER_PRE_AGREEMENT_PATHS = ["/dashboard", "/onboarding", "/legal"];
 
 function pathMatches(pathname: string, allowedPath: string) {
   return pathname === allowedPath || pathname.startsWith(`${allowedPath}/`);

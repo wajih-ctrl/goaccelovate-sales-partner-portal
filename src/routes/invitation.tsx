@@ -43,9 +43,7 @@ function Invitation() {
     }
 
     toast.success(mode === "recovery" ? "Password updated" : "Invitation accepted");
-    nav({
-      to: result.requiresAgreement || mode !== "recovery" ? "/onboarding" : "/dashboard",
-    });
+    nav({ to: "/dashboard", replace: true });
   };
 
   return (
@@ -109,8 +107,8 @@ function Invitation() {
               checked={acceptedTerms}
               onChange={(event) => setAcceptedTerms(event.target.checked)}
             />
-            I understand that I must review and electronically sign the Partner Agreement and NDA on
-            the next step before accessing program data.
+            I understand that I must review and electronically sign the Partner Agreement and NDA
+            from Onboarding before accessing program data.
           </label>
           <Button className="w-full" type="submit" disabled={loading}>
             <CheckCircle2 className="mr-2 h-4 w-4" />

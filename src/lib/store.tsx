@@ -1,5 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 import { useAuth } from "./auth";
 import { buildStoragePath, STORAGE_BUCKETS, validateUploadFile } from "./file-upload";
@@ -732,6 +740,8 @@ function groupOnboarding(rows: any[]) {
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { user, ready, authMode } = useAuth();
   const businessUserId = user?.id;
+  const businessUserRole = user?.role;
+  const businessAgreementsComplete = user?.agreementsComplete;
   const realMode = ready && authMode === "supabase" && isSupabaseConfigured && Boolean(supabase);
   const [hydrated, setHydrated] = useState(false);
   const [partners, setPartners] = useState<Partner[]>([]);
@@ -750,6 +760,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [attachments, setAttachments] = useState<Record<string, StoredAttachment[]>>({});
   const [partnerDocuments, setPartnerDocuments] = useState<Record<string, PartnerDocument[]>>({});
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearBusinessState = useCallback(() => {
     setPartners([]);
@@ -772,6 +783,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const refreshSupabaseState = useCallback(async () => {
     if (!supabase || !businessUserId) return;
+    const isPartner = businessUserRole === "partner";
+    const isPreAgreementPartner = isPartner && businessAgreementsComplete !== true;
+    const canViewAudit = businessUserRole === "super_admin";
+    const skippedQuery = () => Promise.resolve({ data: [] as any[], error: null });
 
     const [
       partnersRes,
@@ -793,34 +808,62 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       profilesRes,
       invitationsRes,
     ] = await Promise.all([
-      supabase.from("partner_profiles").select("*").order("name"),
-      supabase.from("leads").select("*").order("created_at", { ascending: false }),
-      supabase.from("commissions").select("*").order("created_at", { ascending: false }),
-      supabase.from("payout_requests").select("*").order("created_at", { ascending: false }),
-      supabase.from("payout_request_items").select("*"),
-      supabase.from("client_payments").select("*").order("created_at", { ascending: false }),
-      supabase.from("discovery_calls").select("*").order("call_at", { ascending: false }),
-      supabase.from("lead_activity_log").select("*").order("created_at", { ascending: false }),
-      supabase.from("announcements").select("*").order("published_at", { ascending: false }),
-      supabase.from("announcement_reads").select("*"),
+      isPreAgreementPartner
+        ? skippedQuery()
+        : supabase.from("partner_profiles").select("*").order("name"),
+      isPreAgreementPartner
+        ? skippedQuery()
+        : supabase.from("leads").select("*").order("created_at", { ascending: false }),
+      isPreAgreementPartner
+        ? skippedQuery()
+        : supabase.from("commissions").select("*").order("created_at", { ascending: false }),
+      isPreAgreementPartner
+        ? skippedQuery()
+        : supabase.from("payout_requests").select("*").order("created_at", { ascending: false }),
+      isPreAgreementPartner ? skippedQuery() : supabase.from("payout_request_items").select("*"),
+      isPartner
+        ? skippedQuery()
+        : supabase.from("client_payments").select("*").order("created_at", { ascending: false }),
+      isPreAgreementPartner
+        ? skippedQuery()
+        : supabase.from("discovery_calls").select("*").order("call_at", { ascending: false }),
+      isPreAgreementPartner
+        ? skippedQuery()
+        : supabase.from("lead_activity_log").select("*").order("created_at", { ascending: false }),
+      isPreAgreementPartner
+        ? skippedQuery()
+        : supabase.from("announcements").select("*").order("published_at", { ascending: false }),
+      isPreAgreementPartner ? skippedQuery() : supabase.from("announcement_reads").select("*"),
       supabase.from("notifications").select("*").order("created_at", { ascending: false }),
-      supabase.from("audit_log").select("*").order("created_at", { ascending: false }),
-      supabase
-        .from("partner_onboarding_steps")
-        .select("partner_id,completed,onboarding_steps(key)"),
-      supabase.from("lead_attachments").select("*").order("uploaded_at", { ascending: false }),
-      supabase.from("partner_documents").select("*").order("uploaded_at", { ascending: false }),
-      supabase.from("settings").select("*"),
-      supabase
-        .from("profiles")
-        .select("id,email,full_name,role,account_status,partner_id,avatar_url"),
-      supabase
-        .from("invitations")
-        .select("*")
-        .is("accepted_at", null)
-        .is("revoked_at", null)
-        .gt("expires_at", nowIso())
-        .order("created_at", { ascending: false }),
+      canViewAudit
+        ? supabase.from("audit_log").select("*").order("created_at", { ascending: false })
+        : skippedQuery(),
+      isPreAgreementPartner
+        ? skippedQuery()
+        : supabase
+            .from("partner_onboarding_steps")
+            .select("partner_id,completed,onboarding_steps(key)"),
+      isPreAgreementPartner
+        ? skippedQuery()
+        : supabase.from("lead_attachments").select("*").order("uploaded_at", { ascending: false }),
+      isPreAgreementPartner
+        ? skippedQuery()
+        : supabase.from("partner_documents").select("*").order("uploaded_at", { ascending: false }),
+      isPreAgreementPartner ? skippedQuery() : supabase.from("settings").select("*"),
+      isPartner
+        ? skippedQuery()
+        : supabase
+            .from("profiles")
+            .select("id,email,full_name,role,account_status,partner_id,avatar_url"),
+      isPartner
+        ? skippedQuery()
+        : supabase
+            .from("invitations")
+            .select("*")
+            .is("accepted_at", null)
+            .is("revoked_at", null)
+            .gt("expires_at", nowIso())
+            .order("created_at", { ascending: false }),
     ]);
 
     const responses = [
@@ -908,7 +951,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         status: "Invited",
       })),
     );
-  }, [businessUserId]);
+  }, [businessAgreementsComplete, businessUserId, businessUserRole]);
 
   useEffect(() => {
     let active = true;
@@ -947,10 +990,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const reloadAfterWrite = useCallback(() => {
     if (!realMode) return;
-    void refreshSupabaseState().catch((error) =>
-      handleWriteError(error, "Unable to refresh data."),
-    );
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null;
+      void refreshSupabaseState().catch((error) =>
+        handleWriteError(error, "Unable to refresh data."),
+      );
+    }, 150);
   }, [handleWriteError, realMode, refreshSupabaseState]);
+
+  useEffect(
+    () => () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    },
+    [],
+  );
 
   const pushActivity = (entry: Omit<ActivityEntry, "id" | "date">) => {
     setActivity((a) => [{ ...entry, id: uid("A"), date: nowIso() }, ...a]);
@@ -1877,12 +1931,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         if (error) {
           handleWriteError(error, "Unable to submit the payout request.");
-          await refreshSupabaseState().catch(() => undefined);
+          reloadAfterWrite();
           return false;
         }
-        await refreshSupabaseState().catch((error) =>
-          handleWriteError(error, "Payout submitted, but the latest data could not be refreshed."),
-        );
+        reloadAfterWrite();
         return true;
       }
       const id = uid("PO");
@@ -1914,7 +1966,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return true;
     },
-    [commissions, handleWriteError, realMode, refreshSupabaseState],
+    [commissions, handleWriteError, realMode, reloadAfterWrite],
   );
 
   const approvePayout: AppActions["approvePayout"] = useCallback(
@@ -1927,12 +1979,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         if (error) {
           handleWriteError(error, "Unable to approve the payout request.");
-          await refreshSupabaseState().catch(() => undefined);
+          reloadAfterWrite();
           return false;
         }
-        await refreshSupabaseState().catch((error) =>
-          handleWriteError(error, "Payout approved, but the latest data could not be refreshed."),
-        );
+        reloadAfterWrite();
         return true;
       }
       setPayouts((prev) =>
@@ -1953,7 +2003,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       return true;
     },
-    [handleWriteError, realMode, refreshSupabaseState],
+    [handleWriteError, realMode, reloadAfterWrite],
   );
 
   const rejectPayout: AppActions["rejectPayout"] = useCallback(
@@ -1970,12 +2020,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         if (error) {
           handleWriteError(error, "Unable to reject the payout request.");
-          await refreshSupabaseState().catch(() => undefined);
+          reloadAfterWrite();
           return false;
         }
-        await refreshSupabaseState().catch((error) =>
-          handleWriteError(error, "Payout rejected, but the latest data could not be refreshed."),
-        );
+        reloadAfterWrite();
         return true;
       }
       setPayouts((prev) =>
@@ -2001,7 +2049,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       return true;
     },
-    [handleWriteError, realMode, refreshSupabaseState],
+    [handleWriteError, realMode, reloadAfterWrite],
   );
 
   const recordPayoutPayment: AppActions["recordPayoutPayment"] = useCallback(
@@ -2031,12 +2079,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         if (error) {
           handleWriteError(error, "Unable to confirm the external payout.");
-          await refreshSupabaseState().catch(() => undefined);
+          reloadAfterWrite();
           return false;
         }
-        await refreshSupabaseState().catch((error) =>
-          handleWriteError(error, "Payout confirmed, but the latest data could not be refreshed."),
-        );
+        reloadAfterWrite();
         return true;
       }
       setPayouts((prev) =>
@@ -2076,7 +2122,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       return true;
     },
-    [handleWriteError, payouts, realMode, refreshSupabaseState],
+    [handleWriteError, payouts, realMode, reloadAfterWrite],
   );
 
   const recordClientPayment: AppActions["recordClientPayment"] = useCallback(
@@ -2093,12 +2139,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         if (error) {
           handleWriteError(error, "Unable to record the client payment.");
-          await refreshSupabaseState().catch(() => undefined);
+          reloadAfterWrite();
           return false;
         }
-        await refreshSupabaseState().catch((error) =>
-          handleWriteError(error, "Payment recorded, but the latest data could not be refreshed."),
-        );
+        reloadAfterWrite();
         return true;
       }
       const released = commissions.filter(
@@ -2156,7 +2200,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       return true;
     },
-    [commissions, handleWriteError, realMode, refreshSupabaseState],
+    [commissions, handleWriteError, realMode, reloadAfterWrite],
   );
 
   const publishAnnouncement: AppActions["publishAnnouncement"] = useCallback(
