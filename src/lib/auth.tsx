@@ -298,8 +298,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       browser_user_agent: typeof navigator === "undefined" ? null : navigator.userAgent,
     });
     if (error) return { error: error.message };
-    const nextUser = await loadSupabaseUser();
-    if (nextUser) setUser(nextUser);
+    setUser((current) => (current ? { ...current, agreementsComplete: true } : current));
     return {};
   };
 

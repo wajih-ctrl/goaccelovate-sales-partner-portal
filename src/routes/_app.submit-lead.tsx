@@ -16,7 +16,7 @@ export const Route = createFileRoute("/_app/submit-lead")({
 function SubmitLead() {
   const { user } = useAuth();
   const nav = useNavigate();
-  const { leads, settings, addLead, addAttachment, setOnboardingStep } = useStore();
+  const { leads, settings, addLead, addAttachment } = useStore();
 
   const empty = {
     company: "",
@@ -106,15 +106,14 @@ function SubmitLead() {
       );
       if (files.length) {
         setSubmitState("uploading");
-        for (const file of files) {
-          const uploaded = await addAttachment(lead.id, file, user.name, false);
-          if (!uploaded) {
-            setSubmitState("idle");
-            return;
-          }
+        const uploads = await Promise.all(
+          files.map((file) => addAttachment(lead.id, file, user.name, false)),
+        );
+        if (uploads.some((uploaded) => !uploaded)) {
+          setSubmitState("idle");
+          return;
         }
       }
-      setOnboardingStep(user.partnerId!, "firstLead", true, user.name);
       setSubmitted({ id: lead.id, duplicate: false });
       toast.success("Lead submitted successfully and added to your pipeline.");
       setSubmitState("idle");

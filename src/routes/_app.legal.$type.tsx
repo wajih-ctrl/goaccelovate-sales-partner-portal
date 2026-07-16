@@ -75,16 +75,6 @@ function LegalDocumentPage() {
   if (type !== "agreement" && type !== "nda") return <Navigate to="/onboarding" replace />;
 
   const partner = partners.find((item) => item.id === user?.partnerId);
-  if (user?.role === "partner" && user.partnerId && (!partner || documentLoading)) {
-    return (
-      <>
-        <PageHeader title="Preparing document" description="Loading your current partner terms." />
-        <PageContainer>
-          <div className="text-sm text-muted-foreground">Preparing your document...</div>
-        </PageContainer>
-      </>
-    );
-  }
   const partnerName = partner?.name || (user?.role === "partner" ? user.name : "Sales Partner");
   const commissionRate = partner?.commissionRate || 10;
   const effectiveDate = new Date(
@@ -123,7 +113,9 @@ function LegalDocumentPage() {
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back
               </Button>
-              {user?.role === "partner" && !acceptance ? (
+              {user?.role === "partner" && documentLoading ? (
+                <Button disabled>Loading signature status...</Button>
+              ) : user?.role === "partner" && !acceptance ? (
                 <Button onClick={() => navigate({ to: "/onboarding" })}>
                   Sign Agreement and NDA
                 </Button>
@@ -203,7 +195,12 @@ function LegalDocumentPage() {
                 </div>
                 <div className="space-y-3 text-sm">
                   <div className="font-semibold">For {partnerName}</div>
-                  {acceptance ? (
+                  {documentLoading ? (
+                    <>
+                      <div className="pt-5 text-slate-500">Loading signature status...</div>
+                      <div>Date: Pending</div>
+                    </>
+                  ) : acceptance ? (
                     <>
                       <div className="pt-5">
                         Electronic signature:{" "}

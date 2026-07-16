@@ -761,6 +761,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [attachments, setAttachments] = useState<Record<string, StoredAttachment[]>>({});
   const [partnerDocuments, setPartnerDocuments] = useState<Record<string, PartnerDocument[]>>({});
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hydratedAccessRef = useRef<{
+    userId: string;
+    role: User["role"];
+    agreementsComplete?: boolean;
+  } | null>(null);
 
   const clearBusinessState = useCallback(() => {
     setPartners([]);
@@ -808,9 +813,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       profilesRes,
       invitationsRes,
     ] = await Promise.all([
-      isPreAgreementPartner
-        ? skippedQuery()
-        : supabase.from("partner_profiles").select("*").order("name"),
+      supabase.from("partner_profiles").select("*").order("name"),
       isPreAgreementPartner
         ? skippedQuery()
         : supabase.from("leads").select("*").order("created_at", { ascending: false }),
@@ -957,18 +960,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let active = true;
     if (!ready) {
       setHydrated(false);
+      hydratedAccessRef.current = null;
       return () => {
         active = false;
       };
     }
-    setHydrated(false);
     if (!realMode) {
       clearBusinessState();
+      hydratedAccessRef.current = null;
       setHydrated(true);
       return () => {
         active = false;
       };
     }
+    const previousAccess = hydratedAccessRef.current;
+    const unlockingPartner =
+      previousAccess?.userId === businessUserId &&
+      previousAccess.role === "partner" &&
+      businessUserRole === "partner" &&
+      previousAccess.agreementsComplete !== true &&
+      businessAgreementsComplete === true;
+    if (!unlockingPartner) setHydrated(false);
     refreshSupabaseState()
       .catch((error) => {
         console.error(error);
@@ -976,12 +988,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         clearBusinessState();
       })
       .finally(() => {
-        if (active) setHydrated(true);
+        if (active && businessUserId && businessUserRole) {
+          hydratedAccessRef.current = {
+            userId: businessUserId,
+            role: businessUserRole,
+            agreementsComplete: businessAgreementsComplete,
+          };
+          setHydrated(true);
+        }
       });
     return () => {
       active = false;
     };
-  }, [clearBusinessState, ready, realMode, refreshSupabaseState]);
+  }, [
+    businessAgreementsComplete,
+    businessUserId,
+    businessUserRole,
+    clearBusinessState,
+    ready,
+    realMode,
+    refreshSupabaseState,
+  ]);
 
   const handleWriteError = useCallback((error: unknown, fallback = "Supabase write failed.") => {
     console.error(error);
@@ -1123,7 +1150,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
         const realLead = mapLead(data.lead);
         setLeads((prev) => [realLead, ...prev.filter((item) => item.id !== realLead.id)]);
-        reloadAfterWrite();
+        setActivity((prev) => [
+          {
+            id: uid("A"),
+            leadId: realLead.id,
+            type: "system",
+            user: "System",
+            text: "Lead accepted automatically into Identified Opportunity",
+            date: nowIso(),
+          },
+          ...prev,
+        ]);
+        setOnboarding((prev) => ({
+          ...prev,
+          [l.partnerId]: { ...(prev[l.partnerId] || {}), firstLead: true },
+        }));
+        setNotifications((prev) => [
+          {
+            id: uid("N"),
+            title: "Lead accepted into pipeline",
+            body: `${realLead.company} entered Identified Opportunity.`,
+            type: "success",
+            mandatory: false,
+            read: false,
+            date: nowIso(),
+          },
+          ...prev,
+        ]);
         return realLead;
       }
 
@@ -1159,7 +1212,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       return lead;
     },
-    [handleWriteError, realMode, reloadAfterWrite],
+    [handleWriteError, realMode],
   );
 
   const updateLeadStage: AppActions["updateLeadStage"] = useCallback(
@@ -1434,6 +1487,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
 
       if (realMode && supabase) {
+        const attachmentId = crypto.randomUUID();
         const storagePath = buildStoragePath(user?.id, leadId, file);
         const { error: uploadError } = await supabase.storage
           .from(STORAGE_BUCKETS.leadAttachments)
@@ -1444,6 +1498,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
 
         const { error: metadataError } = await supabase.from("lead_attachments").insert({
+          id: attachmentId,
           lead_id: leadId,
           name: file.name,
           storage_bucket: STORAGE_BUCKETS.leadAttachments,
@@ -1458,10 +1513,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return false;
         }
 
-        if (!isPrivate) {
+        setAttachments((current) => ({
+          ...current,
+          [leadId]: [
+            {
+              id: attachmentId,
+              name: file.name,
+              date: nowIso(),
+              storageBucket: STORAGE_BUCKETS.leadAttachments,
+              storagePath,
+              private: isPrivate,
+            },
+            ...(current[leadId] || []),
+          ],
+        }));
+
+        if (!isPrivate && user?.role !== "partner") {
           const lead = leads.find((item) => item.id === leadId);
           if (lead) {
-            await notifyPartner(lead.partnerId, {
+            void notifyPartner(lead.partnerId, {
               title: "New lead attachment",
               body: `${file.name} was uploaded for ${lead.company}.`,
               type: "info",
@@ -1469,7 +1539,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }
         toast.success(`${file.name} uploaded`);
-        reloadAfterWrite();
         return true;
       }
 
@@ -1490,7 +1559,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toast.success(`${file.name} uploaded`);
       return true;
     },
-    [handleWriteError, leads, notifyPartner, realMode, reloadAfterWrite, user?.id],
+    [handleWriteError, leads, notifyPartner, realMode, user?.id, user?.role],
   );
 
   const deleteLead: AppActions["deleteLead"] = useCallback(
