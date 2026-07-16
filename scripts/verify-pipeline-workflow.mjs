@@ -59,6 +59,20 @@ async function expectValue(actual, expected, label) {
   }
 }
 
+async function within(promise, label, timeoutMs = 15000) {
+  let timeout;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label}: timed out`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function createAccount(label, role) {
   const email = `codex-flow-${label}-${stamp}@example.com`;
   const data = await must(
@@ -497,6 +511,49 @@ try {
     }),
     "Approve advance payout",
   );
+
+  let resolvePayoutEvent;
+  let resolveCommissionEvent;
+  const payoutEvent = new Promise((resolve) => {
+    resolvePayoutEvent = resolve;
+  });
+  const commissionEvent = new Promise((resolve) => {
+    resolveCommissionEvent = resolve;
+  });
+  const realtimeChannel = partnerClient
+    .channel(`payout-completion-${stamp}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "payout_requests",
+        filter: `id=eq.${firstPayout.id}`,
+      },
+      (payload) => resolvePayoutEvent(payload.new),
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "commissions",
+        filter: `id=eq.${commission.id}`,
+      },
+      (payload) => resolveCommissionEvent(payload.new),
+    );
+  await within(
+    new Promise((resolve, reject) => {
+      realtimeChannel.subscribe((status, error) => {
+        if (status === "SUBSCRIBED") resolve();
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          reject(error || new Error(`Realtime subscription failed: ${status}`));
+        }
+      });
+    }),
+    "Partner Realtime subscription",
+  );
+
   await must(
     admin.rpc("record_payout_paid", {
       target_payout: firstPayout.id,
@@ -507,6 +564,18 @@ try {
     }),
     "Record advance payout paid",
   );
+  const [livePayout, liveCommission] = await Promise.all([
+    within(payoutEvent, "Partner payout completion event"),
+    within(commissionEvent, "Partner commission paid event"),
+  ]);
+  await expectValue(livePayout.status, "Paid", "Realtime payout state");
+  await expectValue(
+    livePayout.transaction_reference,
+    `PAYOUT-ADV-${stamp}`,
+    "Realtime payout reference",
+  );
+  await expectValue(Number(liveCommission.paid_amount), 20, "Realtime paid commission amount");
+  await partnerClient.removeChannel(realtimeChannel);
   commission = await must(
     service.from("commissions").select("*").eq("id", commission.id).single(),
     "Read paid advance commission",

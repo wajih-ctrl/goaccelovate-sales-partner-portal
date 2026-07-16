@@ -134,7 +134,7 @@ function Commissions() {
 
         <Card className="shadow-card overflow-hidden">
           <div className="responsive-table-scroll">
-            <table className="min-w-[980px] w-full whitespace-nowrap text-sm">
+            <table className="min-w-[1120px] w-full whitespace-nowrap text-sm">
               <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 text-left">Deal</th>
@@ -146,6 +146,7 @@ function Commissions() {
                   <th className="px-4 py-3 text-right">Payable</th>
                   <th className="px-4 py-3 text-right">Paid</th>
                   <th className="px-4 py-3 text-left">State</th>
+                  <th className="px-4 py-3 text-left">Payment reference</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -153,6 +154,11 @@ function Commissions() {
                 {list.map((c) => {
                   const lead = leads.find((l) => l.id === c.leadId);
                   const partner = partners.find((p) => p.id === c.partnerId);
+                  const paidPayout = payouts
+                    .filter(
+                      (payout) => payout.status === "Paid" && payout.commissionIds.includes(c.id),
+                    )
+                    .sort((a, b) => (b.paidDate || "").localeCompare(a.paidDate || ""))[0];
                   return (
                     <tr key={c.id} className="border-t hover:bg-accent/20">
                       <td className="px-4 py-3">
@@ -184,6 +190,9 @@ function Commissions() {
                       <td className="px-4 py-3 text-right">{fmtCurrency(c.paidAmount || 0)}</td>
                       <td className="px-4 py-3">
                         <StatusBadge status={c.state} />
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {paidPayout?.reference || "-"}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <DropdownMenu>
@@ -248,7 +257,7 @@ function Commissions() {
                 {list.length === 0 && (
                   <tr>
                     <td
-                      colSpan={isPartner ? 7 : 8}
+                      colSpan={isPartner ? 10 : 11}
                       className="py-10 text-center text-muted-foreground"
                     >
                       No commissions yet.

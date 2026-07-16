@@ -1026,6 +1026,70 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }, 150);
   }, [handleWriteError, realMode, refreshSupabaseState]);
 
+  useEffect(() => {
+    if (!realMode || !supabase || !businessUserId) return;
+
+    const client = supabase;
+    const channel = client
+      .channel(`business-live-${businessUserId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "payout_requests" },
+        (payload: any) => {
+          const row = payload.eventType === "DELETE" ? payload.old : payload.new;
+          if (!row?.id) return;
+
+          if (payload.eventType === "DELETE") {
+            setPayouts((current) => current.filter((payout) => payout.id !== row.id));
+            return;
+          }
+
+          const mapped = mapPayout(row, []);
+          setPayouts((current) => {
+            const existing = current.find((payout) => payout.id === row.id);
+            if (!existing) return current;
+            return current.map((payout) =>
+              payout.id === row.id ? { ...mapped, commissionIds: existing.commissionIds } : payout,
+            );
+          });
+
+          if (payload.eventType === "INSERT") reloadAfterWrite();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "commissions" },
+        (payload: any) => {
+          const row = payload.eventType === "DELETE" ? payload.old : payload.new;
+          if (!row?.id) return;
+
+          if (payload.eventType === "DELETE") {
+            setCommissions((current) => current.filter((commission) => commission.id !== row.id));
+            return;
+          }
+
+          const mapped = mapCommission(row);
+          setCommissions((current) => {
+            const exists = current.some((commission) => commission.id === mapped.id);
+            return exists
+              ? current.map((commission) => (commission.id === mapped.id ? mapped : commission))
+              : [mapped, ...current];
+          });
+        },
+      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "payout_request_items" }, () =>
+        reloadAfterWrite(),
+      )
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, () =>
+        reloadAfterWrite(),
+      )
+      .subscribe();
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [businessUserId, realMode, reloadAfterWrite]);
+
   useEffect(
     () => () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
@@ -2151,6 +2215,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           reloadAfterWrite();
           return false;
         }
+
+        setPayouts((current) =>
+          current.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  status: "Paid",
+                  paidDate: payload.date,
+                  method: payload.method,
+                  reference: payload.reference,
+                }
+              : item,
+          ),
+        );
+        setCommissions((current) =>
+          current.map((commission) => {
+            if (!payout.commissionIds.includes(commission.id)) return commission;
+            const newlyPaid = Math.max(
+              0,
+              (commission.eligibleAmount || 0) - (commission.paidAmount || 0),
+            );
+            const paidAmount = Math.min(
+              commission.amount,
+              (commission.paidAmount || 0) + newlyPaid,
+            );
+            return {
+              ...commission,
+              paidAmount,
+              state: paidAmount >= commission.amount ? "Paid" : "Unpaid",
+            };
+          }),
+        );
         reloadAfterWrite();
         return true;
       }
