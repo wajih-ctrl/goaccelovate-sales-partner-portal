@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { useAuth } from "@/lib/auth";
 import { isSupabaseConfigured } from "@/lib/supabase";
 
@@ -36,11 +37,7 @@ function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
       <div className="hidden flex-1 bg-sidebar text-sidebar-foreground lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <img
-          src="/goaccelovate-logo.png"
-          alt="GoAccelovate"
-          className="h-10 w-auto max-w-[240px] object-contain"
-        />
+        <BrandLogo tone="white" className="h-16 w-auto max-w-[270px] object-contain" />
         <div className="max-w-md">
           <h2 className="text-3xl font-semibold leading-tight">
             The private operating system for the Global Partner Program.
@@ -56,13 +53,7 @@ function LoginPage() {
       <div className="flex flex-1 items-center justify-center p-6 md:p-12">
         <div className="w-full max-w-md space-y-6">
           <div className="lg:hidden">
-            <div className="inline-flex bg-black px-3 py-2">
-              <img
-                src="/goaccelovate-logo.png"
-                alt="GoAccelovate"
-                className="h-7 w-auto max-w-[190px] object-contain"
-              />
-            </div>
+            <BrandLogo tone="black" className="h-14 w-auto max-w-[220px] object-contain" />
           </div>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>

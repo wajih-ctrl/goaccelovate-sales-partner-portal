@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { ShieldAlert } from "lucide-react";
 
 export const Route = createFileRoute("/access-denied")({
@@ -9,7 +10,8 @@ export const Route = createFileRoute("/access-denied")({
 function AccessDenied() {
   return (
     <div className="flex min-h-screen items-center justify-center p-6 bg-background">
-      <div className="max-w-md text-center space-y-4">
+      <div className="max-w-md space-y-4 text-center">
+        <BrandLogo tone="black" className="mx-auto h-14 w-auto max-w-[220px] object-contain" />
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10 text-destructive">
           <ShieldAlert className="h-7 w-7" />
         </div>

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/invitation")({
@@ -50,13 +51,7 @@ function Invitation() {
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
       <Card className="w-full max-w-lg space-y-5 p-8">
         <div className="flex items-center justify-between gap-3 border-b pb-4">
-          <div className="inline-flex bg-black px-3 py-2">
-            <img
-              src="/goaccelovate-logo.png"
-              alt="GoAccelovate"
-              className="h-7 w-auto max-w-[190px] object-contain"
-            />
-          </div>
+          <BrandLogo tone="black" className="h-14 w-auto max-w-[220px] object-contain" />
           <div className="text-xs text-muted-foreground">
             {mode === "recovery" ? "Password reset" : "Partner invitation"}
           </div>

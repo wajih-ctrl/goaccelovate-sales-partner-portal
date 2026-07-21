@@ -192,7 +192,11 @@ interface AppActions {
     },
     actor: string,
   ) => Promise<boolean>;
-  addAnnouncementComment: (announcementId: string, body: string) => Promise<boolean>;
+  addAnnouncementComment: (
+    announcementId: string,
+    body: string,
+    mentionedUserIds?: string[],
+  ) => Promise<boolean>;
   setAnnouncementReaction: (
     announcementId: string,
     reaction: "Like" | "Celebrate" | "Insightful" | null,
@@ -692,6 +696,7 @@ function mapAnnouncement(row: any, reads: any[], comments: any[], reactions: any
         actorName: comment.actor_name,
         body: comment.body,
         date: comment.created_at,
+        mentionedUserIds: comment.mentioned_user_ids || [],
       })),
     reactions: reactions
       .filter((reaction) => reaction.announcement_id === row.id)
@@ -2709,21 +2714,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const addAnnouncementComment: AppActions["addAnnouncementComment"] = useCallback(
-    async (announcementId, body) => {
+    async (announcementId, body, mentionedUserIds = []) => {
       if (!user || !body.trim()) return false;
       const id = crypto.randomUUID();
+      let savedComment: any = null;
       if (realMode && supabase) {
-        const { error } = await (supabase as any).from("announcement_comments").insert({
-          id,
-          announcement_id: announcementId,
-          actor_id: user.id,
-          actor_name: user.name,
-          body: body.trim(),
+        const { data, error } = await (supabase as any).rpc("add_announcement_comment_secure", {
+          target_announcement: announcementId,
+          comment_body: body.trim(),
+          mentioned_users: mentionedUserIds,
         });
         if (error) {
           handleWriteError(error, "Unable to post the announcement reply.");
           return false;
         }
+        savedComment = data;
       }
       setAnnouncements((current) =>
         current.map((announcement) =>
@@ -2733,12 +2738,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 comments: [
                   ...announcement.comments,
                   {
-                    id,
+                    id: savedComment?.id || id,
                     announcementId,
                     actorId: user.id,
                     actorName: user.name,
                     body: body.trim(),
-                    date: nowIso(),
+                    date: savedComment?.created_at || nowIso(),
+                    mentionedUserIds,
                   },
                 ],
               }

@@ -28,6 +28,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -144,11 +145,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           className={`flex h-16 items-center gap-2 border-b border-sidebar-border ${collapsed ? "justify-center px-3" : "px-4 sm:px-5"}`}
         >
           <div className={collapsed ? "h-9 w-9 shrink-0 overflow-hidden" : "min-w-0 shrink"}>
-            <img
-              src="/goaccelovate-logo.png"
-              alt="GoAccelovate"
+            <BrandLogo
+              tone="white"
               className={
-                collapsed ? "h-9 w-auto max-w-none" : "h-8 w-auto max-w-[168px] object-contain"
+                collapsed
+                  ? "h-9 w-[154px] max-w-none object-contain object-left"
+                  : "h-10 w-auto max-w-[178px] object-contain"
               }
             />
           </div>

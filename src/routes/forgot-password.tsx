@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/forgot-password")({
@@ -34,6 +35,7 @@ function ForgotPassword() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
       <Card className="w-full max-w-md space-y-4 p-6">
+        <BrandLogo tone="black" className="h-14 w-auto max-w-[220px] object-contain" />
         <h1 className="text-xl font-semibold">Reset your password</h1>
         {!sent ? (
           <form className="space-y-4" onSubmit={submit}>

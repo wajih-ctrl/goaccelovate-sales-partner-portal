@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 import { PageHeader, PageContainer } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 import { ONBOARDING_STEPS } from "@/lib/domain";
@@ -261,11 +262,7 @@ function Onboarding() {
               <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div className="max-w-2xl">
                   <div className="mb-4 flex items-center gap-3">
-                    <img
-                      src="/goaccelovate-logo.png"
-                      alt="GoAccelovate"
-                      className="h-10 w-auto object-contain"
-                    />
+                    <BrandLogo tone="black" className="h-14 w-auto max-w-[230px] object-contain" />
                     <div>
                       <h3 id="welcome-kit-title" className="font-semibold">
                         Global Partner Program Welcome Kit

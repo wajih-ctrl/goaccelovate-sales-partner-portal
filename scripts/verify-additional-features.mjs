@@ -176,25 +176,55 @@ try {
   );
   if (!file) throw new Error("Announcement attachment download returned no file.");
 
-  const notificationsBefore = await must(
-    service.from("notifications").select("id").eq("partner_id", partnerA.id),
+  const partnerMentionCandidates = await must(
+    partnerAClient.rpc("get_announcement_mention_candidates", {
+      target_announcement: announcementId,
+    }),
+    "Partner reads announcement mention candidates",
+  );
+  if (!partnerMentionCandidates.some((candidate) => candidate.id === adminAccount.id)) {
+    throw new Error("Partner could not mention the announcement Admin.");
+  }
+  if (partnerMentionCandidates.some((candidate) => candidate.id === partnerBAccount.id)) {
+    throw new Error("Partner could see another partner in mention suggestions.");
+  }
+  const adminMentionCandidates = await must(
+    admin.rpc("get_announcement_mention_candidates", { target_announcement: announcementId }),
+    "Admin reads announcement mention candidates",
+  );
+  if (!adminMentionCandidates.some((candidate) => candidate.id === partnerAAccount.id)) {
+    throw new Error("Admin could not mention an eligible Sales Partner.");
+  }
+  await expectError(
+    partnerAClient.from("announcement_comments").insert({
+      announcement_id: announcementId,
+      actor_id: partnerAAccount.id,
+      actor_name: "Spoofed Name",
+      body: "Direct inserts must be denied.",
+    }),
+    "Direct announcement comment insert denied",
+  );
+  const ownNotificationsBefore = await must(
+    service.from("notifications").select("id").eq("recipient_id", partnerAAccount.id),
     "Read Partner A notifications before reply",
   );
+  const adminNotificationsBefore = await must(
+    service.from("notifications").select("id").eq("recipient_id", adminAccount.id),
+    "Read Admin notifications before mention",
+  );
   const comment = await must(
-    partnerAClient
-      .from("announcement_comments")
-      .insert({
-        announcement_id: announcementId,
-        actor_id: partnerAAccount.id,
-        actor_name: "Spoofed Name",
-        body: "Thank you. This business update is clear.",
-      })
-      .select("actor_name,body")
-      .single(),
-    "Partner replies to announcement",
+    partnerAClient.rpc("add_announcement_comment_secure", {
+      target_announcement: announcementId,
+      comment_body: `@[${adminAccount.name}] Thank you. This business update is clear.`,
+      mentioned_users: [adminAccount.id],
+    }),
+    "Partner replies with an Admin mention",
   );
   if (comment.actor_name !== partnerAAccount.name) {
     throw new Error("Announcement comment actor name was not server-authored.");
+  }
+  if (!comment.mentioned_user_ids.includes(adminAccount.id)) {
+    throw new Error("Announcement mention was not persisted.");
   }
   await must(
     partnerAClient.from("announcement_reactions").upsert(
@@ -207,12 +237,19 @@ try {
     ),
     "Partner reacts to announcement",
   );
-  const notificationsAfter = await must(
-    service.from("notifications").select("id").eq("partner_id", partnerA.id),
+  const ownNotificationsAfter = await must(
+    service.from("notifications").select("id").eq("recipient_id", partnerAAccount.id),
     "Read Partner A notifications after reply",
   );
-  if (notificationsAfter.length !== notificationsBefore.length) {
+  if (ownNotificationsAfter.length !== ownNotificationsBefore.length) {
     throw new Error("Partner received a notification for their own announcement reply.");
+  }
+  const adminNotificationsAfter = await must(
+    service.from("notifications").select("id,title").eq("recipient_id", adminAccount.id),
+    "Read Admin notifications after mention",
+  );
+  if (adminNotificationsAfter.length !== adminNotificationsBefore.length + 1) {
+    throw new Error("Mentioned Admin did not receive exactly one notification.");
   }
 
   const selectedId = globalThis.crypto.randomUUID();

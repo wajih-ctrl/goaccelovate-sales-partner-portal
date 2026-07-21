@@ -181,6 +181,7 @@ export interface AnnouncementComment {
   actorName: string;
   body: string;
   date: string;
+  mentionedUserIds?: string[];
 }
 
 export interface AnnouncementReaction {

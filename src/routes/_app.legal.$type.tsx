@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { PageContainer, PageHeader } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { useAuth } from "@/lib/auth";
 import {
   LEGAL_DEFAULTS,
@@ -141,11 +142,7 @@ function LegalDocumentPage() {
       <PageContainer>
         <article className="legal-document mx-auto max-w-4xl border bg-white text-slate-950 shadow-card">
           <header className="legal-document-header flex items-center justify-between gap-4 border-b px-6 py-5 sm:px-10">
-            <img
-              src="/goaccelovate-logo.png"
-              alt="GoAccelovate"
-              className="h-10 w-auto object-contain"
-            />
+            <BrandLogo tone="black" className="h-14 w-auto max-w-[240px] object-contain" />
             <div className="text-right text-xs text-slate-500">Global Partner Program</div>
           </header>
           <div className="space-y-7 px-6 py-8 sm:px-10 sm:py-10">
