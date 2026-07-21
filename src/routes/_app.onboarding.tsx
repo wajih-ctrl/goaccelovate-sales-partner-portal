@@ -34,6 +34,21 @@ type AgreementDocument = {
   content_url: string | null;
 };
 
+function youtubeEmbedUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.replace(/^www\./, "");
+    const id =
+      host === "youtu.be"
+        ? url.pathname.split("/").filter(Boolean)[0]
+        : url.searchParams.get("v") ||
+          (url.pathname.startsWith("/embed/") ? url.pathname.split("/")[2] : null);
+    return id ? `https://www.youtube-nocookie.com/embed/${id}` : null;
+  } catch {
+    return null;
+  }
+}
+
 function Onboarding() {
   const { user, signRequiredAgreements } = useAuth();
   const { onboarding, settings } = useStore();
@@ -86,6 +101,7 @@ function Onboarding() {
   const pct = Math.round((done / ONBOARDING_STEPS.length) * 100);
   const documentsReady =
     documents.length >= 2 && documents.every((document) => document.content_url);
+  const introductionVideoEmbed = youtubeEmbedUrl(settings.welcomeIntroVideoUrl);
 
   const sign = async () => {
     setLoading(true);
@@ -261,8 +277,11 @@ function Onboarding() {
             <section className="border-t pt-5" aria-labelledby="welcome-kit-title">
               <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div className="max-w-2xl">
-                  <div className="mb-4 flex items-center gap-3">
-                    <BrandLogo tone="black" className="h-14 w-auto max-w-[230px] object-contain" />
+                  <div className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+                    <BrandLogo
+                      tone="black"
+                      className="h-11 w-auto max-w-full object-contain sm:h-14 sm:max-w-[230px]"
+                    />
                     <div>
                       <h3 id="welcome-kit-title" className="font-semibold">
                         Global Partner Program Welcome Kit
@@ -272,23 +291,37 @@ function Onboarding() {
                       </p>
                     </div>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="mb-3 overflow-hidden rounded-md border bg-black">
+                    {introductionVideoEmbed ? (
+                      <iframe
+                        src={introductionVideoEmbed}
+                        title="GoAccelovate introduction video"
+                        className="aspect-video w-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <div className="flex aspect-video items-center justify-center text-sm text-white/70">
+                        Introduction video preview is unavailable.
+                      </div>
+                    )}
                     <a
                       href={settings.welcomeIntroVideoUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex gap-3 rounded-md border p-3 transition-colors hover:bg-accent/30"
+                      className="flex items-center gap-3 border-t border-white/15 px-4 py-3 text-white transition-colors hover:bg-white/10"
                     >
-                      <PlayCircle className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
-                      <div>
-                        <div className="flex items-center gap-2 text-sm font-medium">
-                          Introduction video <ExternalLink className="h-3.5 w-3.5" />
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
+                      <PlayCircle className="h-5 w-5 shrink-0" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium">Introduction video</span>
+                        <span className="block text-xs text-white/60">
                           Welcome from the VP of Global Client Relations.
-                        </p>
-                      </div>
+                        </span>
+                      </span>
+                      <ExternalLink className="h-4 w-4 shrink-0" />
                     </a>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <a
                       href="https://www.youtube.com/@GoAccelovate/playlists"
                       target="_blank"

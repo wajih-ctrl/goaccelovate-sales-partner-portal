@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Lead mention RPC is introduced by the accompanying migration. */
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { PageHeader, PageContainer, StatusBadge } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/card";
@@ -5,12 +6,15 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
 import { fmtCurrency, type LeadStage } from "@/lib/domain";
+import { supabase } from "@/lib/supabase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useState } from "react";
 import {
   Activity,
+  AtSign,
   ArrowLeft,
+  Check,
   Download,
   FileUp,
   Lock,
@@ -32,6 +36,12 @@ export const Route = createFileRoute("/_app/leads/$id")({ component: LeadDetail 
 
 const STAGES: LeadStage[] = LEAD_STAGES;
 
+type LeadMentionCandidate = {
+  id: string;
+  name: string;
+  role: "admin" | "super_admin";
+};
+
 function LeadDetail() {
   const { id } = Route.useParams();
   const { user } = useAuth();
@@ -39,6 +49,9 @@ function LeadDetail() {
   const lead = store.leads.find((l) => l.id === id);
   const [comment, setComment] = useState("");
   const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
+  const [mentionPickerOpen, setMentionPickerOpen] = useState(false);
+  const [mentionCandidates, setMentionCandidates] = useState<LeadMentionCandidate[]>([]);
+  const [loadingMentions, setLoadingMentions] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [edit, setEdit] = useState({
@@ -96,9 +109,66 @@ function LeadDetail() {
   const commission = store.commissions.find((c) => c.leadId === id);
   const files = store.attachments[id] || [];
   const dup = lead.status === "Duplicate Rejected";
-  const mentionableStaff = store.staffUsers.filter(
-    (staff) => ["admin", "super_admin"].includes(staff.role) && staff.accountStatus === "active",
-  );
+  const loadMentionCandidates = async () => {
+    setMentionPickerOpen(true);
+    if (mentionCandidates.length || loadingMentions) return;
+    setLoadingMentions(true);
+    if (supabase) {
+      const { data, error } = await (supabase as any).rpc("get_lead_mention_candidates", {
+        target_lead: id,
+      });
+      if (error) {
+        toast.error("Unable to load Admin mentions. Please try again.");
+      } else {
+        setMentionCandidates(
+          (data || []).map(
+            (candidate: { id: string; display_name: string; role: "admin" | "super_admin" }) => ({
+              id: candidate.id,
+              name: candidate.display_name,
+              role: candidate.role,
+            }),
+          ),
+        );
+      }
+    } else {
+      setMentionCandidates(
+        store.staffUsers
+          .filter(
+            (staff) =>
+              (staff.role === "admin" || staff.role === "super_admin") &&
+              staff.accountStatus === "active",
+          )
+          .map((staff) => ({
+            id: staff.id,
+            name: staff.name,
+            role: staff.role as "admin" | "super_admin",
+          })),
+      );
+    }
+    setLoadingMentions(false);
+  };
+
+  const updateComment = (value: string) => {
+    setComment(value);
+    setMentionedUserIds((current) =>
+      current.filter((staffId) => {
+        const staff = mentionCandidates.find((candidate) => candidate.id === staffId);
+        return Boolean(staff && value.includes(`@[${staff.name}]`));
+      }),
+    );
+    if (isPartner && /(^|\s)@$/.test(value)) void loadMentionCandidates();
+  };
+
+  const insertMention = (staffId: string, staffName: string) => {
+    const token = `@[${staffName}]`;
+    setComment((current) => {
+      if (current.includes(token)) return current;
+      if (/(^|\s)@$/.test(current)) return `${current.slice(0, -1)}${token} `;
+      return `${current}${current && !current.endsWith(" ") ? " " : ""}${token} `;
+    });
+    setMentionedUserIds((current) => (current.includes(staffId) ? current : [...current, staffId]));
+    setMentionPickerOpen(false);
+  };
 
   const post = async (priv: boolean) => {
     if (!comment.trim()) {
@@ -109,6 +179,7 @@ function LeadDetail() {
     if (!saved) return;
     setComment("");
     setMentionedUserIds([]);
+    setMentionPickerOpen(false);
     toast.success(priv ? "Private note added" : "Comment posted");
   };
 
@@ -440,51 +511,117 @@ function LeadDetail() {
                 </TabsContent>
 
                 <TabsContent value="comments" className="p-5 pt-0 space-y-3">
-                  <div className="space-y-2">
+                  <div className="relative rounded-md border bg-background shadow-sm focus-within:border-zinc-400 focus-within:ring-2 focus-within:ring-zinc-100">
                     <textarea
                       value={comment}
-                      onChange={(e) => setComment(e.target.value)}
+                      onChange={(event) => updateComment(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") setMentionPickerOpen(false);
+                      }}
                       rows={3}
                       placeholder={
                         isPartner
-                          ? "Add an update on this lead…"
+                          ? "Add an update. Type @ to mention an Admin..."
                           : "Comment (visible to partner unless marked private)"
                       }
-                      className="w-full rounded-md border bg-background p-3 text-sm"
+                      className="block w-full resize-none border-0 bg-transparent p-3 text-sm outline-none"
                     />
-                    <div className="flex justify-end gap-2">
-                      {isAdmin && (
-                        <Button variant="outline" size="sm" onClick={() => void post(true)}>
-                          <Lock className="mr-1 h-3 w-3" />
-                          Private note
+                    <div className="flex min-h-11 flex-wrap items-center gap-2 border-t px-2 py-1.5">
+                      {isPartner && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={mentionPickerOpen ? "default" : "ghost"}
+                          className="h-8 px-2"
+                          disabled={loadingMentions}
+                          onClick={() =>
+                            mentionPickerOpen
+                              ? setMentionPickerOpen(false)
+                              : void loadMentionCandidates()
+                          }
+                          title="Mention an Admin or Super Admin"
+                        >
+                          <AtSign className="mr-1 h-4 w-4" /> Mention
                         </Button>
                       )}
-                      <Button size="sm" onClick={() => void post(false)}>
-                        Post comment
-                      </Button>
+                      {isPartner && mentionedUserIds.length > 0 && (
+                        <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+                          {mentionedUserIds.map((staffId) => {
+                            const staff = mentionCandidates.find(
+                              (candidate) => candidate.id === staffId,
+                            );
+                            return staff ? (
+                              <span
+                                key={staff.id}
+                                className="inline-flex h-7 items-center gap-1 rounded-full bg-sky-50 px-2 text-xs font-medium text-sky-800"
+                              >
+                                @{staff.name}
+                                <Check className="h-3 w-3" />
+                              </span>
+                            ) : null;
+                          })}
+                        </div>
+                      )}
+                      <div className="ml-auto flex gap-2">
+                        {isAdmin && (
+                          <Button variant="outline" size="sm" onClick={() => void post(true)}>
+                            <Lock className="mr-1 h-3 w-3" />
+                            Private note
+                          </Button>
+                        )}
+                        <Button size="sm" onClick={() => void post(false)}>
+                          Post comment
+                        </Button>
+                      </div>
                     </div>
+                    {isPartner && mentionPickerOpen && (
+                      <div className="absolute left-0 top-full z-30 mt-1 w-[min(22rem,calc(100vw-3rem))] overflow-hidden rounded-md border bg-white shadow-elevated">
+                        <div className="border-b px-3 py-2 text-xs font-semibold">
+                          Mention Admin or Super Admin
+                        </div>
+                        <div className="max-h-56 overflow-y-auto p-1">
+                          {loadingMentions ? (
+                            <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                              Loading Admins...
+                            </div>
+                          ) : mentionCandidates.length ? (
+                            mentionCandidates.map((staff) => (
+                              <button
+                                key={staff.id}
+                                type="button"
+                                onClick={() => insertMention(staff.id, staff.name)}
+                                className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-zinc-100"
+                              >
+                                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-[11px] font-semibold text-white">
+                                  {staff.name
+                                    .split(/\s+/)
+                                    .slice(0, 2)
+                                    .map((part) => part[0])
+                                    .join("")
+                                    .toUpperCase()}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium">
+                                    {staff.name}
+                                  </span>
+                                  <span className="block text-[11px] text-muted-foreground">
+                                    {staff.role === "super_admin" ? "Super Admin" : "Admin"}
+                                  </span>
+                                </span>
+                                {mentionedUserIds.includes(staff.id) && (
+                                  <Check className="h-4 w-4 text-success" />
+                                )}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                              No active Admins are available.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {isPartner && mentionableStaff.length > 0 && (
-                    <label className="block text-xs">
-                      Mention Admin or Super Admin (optional)
-                      <select
-                        multiple
-                        value={mentionedUserIds}
-                        onChange={(event) =>
-                          setMentionedUserIds(
-                            Array.from(event.target.selectedOptions, (option) => option.value),
-                          )
-                        }
-                        className="mt-1 min-h-24 w-full rounded-md border bg-background p-2 text-sm"
-                      >
-                        {mentionableStaff.map((staff) => (
-                          <option key={staff.id} value={staff.id}>
-                            @{staff.name} ({staff.role === "super_admin" ? "Super Admin" : "Admin"})
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
                   <div className="space-y-2 border-t pt-3">
                     {activity
                       .filter(
@@ -505,7 +642,21 @@ function LeadDetail() {
                             </span>
                             <span>{new Date(a.date).toLocaleString()}</span>
                           </div>
-                          <p className="mt-1">{a.text}</p>
+                          <p className="mt-1">
+                            {a.text.split(/(@\[[^\]]+\])/g).map((part, index) => {
+                              const mention = part.match(/^@\[([^\]]+)\]$/);
+                              return mention ? (
+                                <span
+                                  key={`${part}-${index}`}
+                                  className="rounded bg-sky-100 px-1 font-medium text-sky-800"
+                                >
+                                  @{mention[1]}
+                                </span>
+                              ) : (
+                                part
+                              );
+                            })}
+                          </p>
                         </div>
                       ))}
                   </div>

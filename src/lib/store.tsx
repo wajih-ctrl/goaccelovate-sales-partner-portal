@@ -260,7 +260,7 @@ const DEFAULT_SETTINGS: Settings = {
   onboardingSteps: ONBOARDING_STEPS.map((s) => s.label),
   tierLabels: ["Associate", "Specialist", "Partner"],
   announcementAttachmentMaxBytes: 2 * 1024 * 1024,
-  welcomeIntroVideoUrl: "https://www.youtube.com/@GoAccelovate",
+  welcomeIntroVideoUrl: "https://youtu.be/RaHdE6QYr98?si=9ZyHGdKMQ8gICvvr",
 };
 
 const EMPTY_ONBOARDING: Record<string, Record<string, boolean>> = {};

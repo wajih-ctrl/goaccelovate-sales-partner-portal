@@ -31,6 +31,7 @@ const stamp = `${Date.now()}-${randomBytes(3).toString("hex")}`;
 const password = `Additional!${randomBytes(18).toString("base64url")}9a`;
 const createdUsers = [];
 const partnerIds = [];
+const leadIds = [];
 const announcementIds = [];
 const storagePaths = [];
 let invitationId;
@@ -125,6 +126,80 @@ try {
   const admin = await signIn(adminAccount);
   const partnerAClient = await signIn(partnerAAccount);
   const partnerBClient = await signIn(partnerBAccount);
+
+  const lead = await must(
+    service
+      .from("leads")
+      .insert({
+        partner_id: partnerA.id,
+        company_name: `Mention verification ${stamp}`,
+        contact_name: "Mention Contact",
+        contact_title: "Director",
+        contact_email: `mention-${stamp}@example.com`,
+        country: "United States",
+        industry: "Technology",
+        estimated_value: 10000,
+        currency: "USD",
+        description:
+          "This verification lead confirms that partner comments may securely mention portal administrators.",
+        stage: "Identified Opportunity",
+        status: "Open",
+        created_by: partnerAAccount.id,
+      })
+      .select("id")
+      .single(),
+    "Create lead for mention verification",
+  );
+  leadIds.push(lead.id);
+  const leadMentionCandidates = await must(
+    partnerAClient.rpc("get_lead_mention_candidates", { target_lead: lead.id }),
+    "Partner reads lead mention candidates",
+  );
+  if (!leadMentionCandidates.some((candidate) => candidate.id === adminAccount.id)) {
+    throw new Error("Partner could not discover an active Admin for a lead mention.");
+  }
+  if (leadMentionCandidates.some((candidate) => candidate.id === partnerBAccount.id)) {
+    throw new Error("Partner could discover another Sales Partner in lead mentions.");
+  }
+  const otherPartnerLeadCandidates = await must(
+    partnerBClient.rpc("get_lead_mention_candidates", { target_lead: lead.id }),
+    "Other Partner lead mention isolation",
+  );
+  if (otherPartnerLeadCandidates.length) {
+    throw new Error("Partner B could discover staff through Partner A's lead.");
+  }
+  const leadMentionNotificationsBefore = await must(
+    service.from("notifications").select("id").eq("recipient_id", adminAccount.id),
+    "Read Admin notifications before lead mention",
+  );
+  const leadComment = await must(
+    partnerAClient.rpc("add_lead_comment_secure", {
+      target_lead: lead.id,
+      comment_text: `@[${adminAccount.name}] Please review this lead update.`,
+      private_comment: false,
+      mentioned_users: [adminAccount.id],
+    }),
+    "Partner mentions Admin in lead comment",
+  );
+  if (leadComment.actor_name !== partnerAAccount.name) {
+    throw new Error("Lead comment actor name was not server-authored.");
+  }
+  await expectError(
+    partnerAClient.rpc("add_lead_comment_secure", {
+      target_lead: lead.id,
+      comment_text: `@[${partnerBAccount.name}] This mention must be denied.`,
+      private_comment: false,
+      mentioned_users: [partnerBAccount.id],
+    }),
+    "Partner-to-partner lead mention denied",
+  );
+  const leadMentionNotificationsAfter = await must(
+    service.from("notifications").select("id").eq("recipient_id", adminAccount.id),
+    "Read Admin notifications after lead mention",
+  );
+  if (leadMentionNotificationsAfter.length !== leadMentionNotificationsBefore.length + 1) {
+    throw new Error("Mentioned Admin did not receive exactly one lead notification.");
+  }
 
   const announcementId = globalThis.crypto.randomUUID();
   announcementIds.push(announcementId);
@@ -325,6 +400,7 @@ try {
   if (announcementIds.length) {
     await service.from("announcements").delete().in("id", announcementIds);
   }
+  if (leadIds.length) await service.from("leads").delete().in("id", leadIds);
   for (const id of createdUsers) await service.auth.admin.deleteUser(id);
   if (partnerIds.length) await service.from("partner_profiles").delete().in("id", partnerIds);
 }
