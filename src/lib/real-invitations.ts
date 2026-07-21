@@ -5,6 +5,7 @@ export type InviteUserPayload = {
   email: string;
   role: "admin" | "partner";
   commissionRate?: number;
+  agreementText?: string;
 };
 
 export type InviteUserResult = {

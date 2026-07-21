@@ -278,7 +278,7 @@ function Commissions() {
               <table className="min-w-[700px] w-full whitespace-nowrap text-sm">
                 <thead>
                   <tr>
-                    <th className="px-4 py-3 text-left">Request</th>
+                    <th className="px-4 py-3 text-left">Payout</th>
                     <th className="px-4 py-3 text-left">Requested</th>
                     <th className="px-4 py-3 text-right">Amount</th>
                     <th className="px-4 py-3 text-left">Status</th>
@@ -288,7 +288,10 @@ function Commissions() {
                 <tbody>
                   {payoutHistory.map((payout) => (
                     <tr key={payout.id} className="border-t">
-                      <td className="px-4 py-3 font-medium">{payout.id}</td>
+                      <td className="px-4 py-3 font-medium">
+                        {payout.commissionIds.length} commission
+                        {payout.commissionIds.length === 1 ? "" : "s"}
+                      </td>
                       <td className="px-4 py-3">
                         {new Date(payout.requestedDate).toLocaleDateString()}
                       </td>

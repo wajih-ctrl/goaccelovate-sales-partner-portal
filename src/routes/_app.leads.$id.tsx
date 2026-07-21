@@ -8,10 +8,25 @@ import { fmtCurrency, type LeadStage } from "@/lib/domain";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useState } from "react";
-import { ArrowLeft, Lock, MessageSquare, Phone, FileUp, Activity } from "lucide-react";
+import {
+  Activity,
+  ArrowLeft,
+  Download,
+  FileUp,
+  Lock,
+  MessageSquare,
+  Pencil,
+  Phone,
+} from "lucide-react";
 import { FormDialog, ReasonDialog } from "@/components/common/dialogs";
 import { DealPaymentPanel } from "@/components/payments/DealPaymentPanel";
-import { canMoveLeadStage, isCommercialStage, LEAD_STAGES } from "@/lib/program";
+import {
+  canMoveLeadStage,
+  COUNTRIES,
+  INDUSTRIES,
+  isCommercialStage,
+  LEAD_STAGES,
+} from "@/lib/program";
 
 export const Route = createFileRoute("/_app/leads/$id")({ component: LeadDetail });
 
@@ -23,6 +38,22 @@ function LeadDetail() {
   const store = useStore();
   const lead = store.leads.find((l) => l.id === id);
   const [comment, setComment] = useState("");
+  const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
+  const [showEdit, setShowEdit] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [edit, setEdit] = useState({
+    company: "",
+    contactName: "",
+    contactTitle: "",
+    contactEmail: "",
+    contactPhone: "",
+    clientLinkedin: "",
+    country: "",
+    industry: "",
+    estimatedValue: "",
+    currency: "USD",
+    description: "",
+  });
   const [showCall, setShowCall] = useState(false);
   const [showCloseWon, setShowCloseWon] = useState(false);
   const [pendingStage, setPendingStage] = useState<LeadStage | null>(null);
@@ -53,7 +84,7 @@ function LeadDetail() {
       </PageContainer>
     );
   }
-  if (!lead) return <Navigate to="/leads" />;
+  if (!lead) return <Navigate to="/pipeline" search={{ view: "list" }} />;
   if (user?.role === "partner" && lead.partnerId !== user.partnerId)
     return <Navigate to="/access-denied" />;
 
@@ -65,14 +96,19 @@ function LeadDetail() {
   const commission = store.commissions.find((c) => c.leadId === id);
   const files = store.attachments[id] || [];
   const dup = lead.status === "Duplicate Rejected";
+  const mentionableStaff = store.staffUsers.filter(
+    (staff) => ["admin", "super_admin"].includes(staff.role) && staff.accountStatus === "active",
+  );
 
-  const post = (priv: boolean) => {
+  const post = async (priv: boolean) => {
     if (!comment.trim()) {
       toast.error("Comment cannot be empty");
       return;
     }
-    store.addComment(id, comment.trim(), user!.name, priv);
+    const saved = await store.addComment(id, comment.trim(), user!.name, priv, mentionedUserIds);
+    if (!saved) return;
     setComment("");
+    setMentionedUserIds([]);
     toast.success(priv ? "Private note added" : "Comment posted");
   };
 
@@ -129,7 +165,10 @@ function LeadDetail() {
   };
 
   const changeStage = (stage: LeadStage) => {
-    if (!user || !canMoveLeadStage(user.role, lead.stage, stage, lead.previousStage)) {
+    if (
+      !user ||
+      !canMoveLeadStage(user.role, lead.stage, stage, lead.previousStage, lead.stageAdminLocked)
+    ) {
       toast.error("Your role cannot move this lead to that stage.");
       return;
     }
@@ -149,15 +188,38 @@ function LeadDetail() {
     <>
       <PageHeader
         title={lead.company}
-        description={`${lead.contactName} · ${lead.contactTitle} · ${lead.country} · ${lead.id}`}
+        description={`${lead.contactName} · ${lead.contactTitle} · ${lead.country}`}
         actions={
           <>
-            <Link to="/leads">
+            <Link to="/pipeline" search={{ view: "list" }}>
               <Button variant="outline">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back
               </Button>
             </Link>
+            {isPartner && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEdit({
+                    company: lead.company,
+                    contactName: lead.contactName,
+                    contactTitle: lead.contactTitle,
+                    contactEmail: lead.contactEmail,
+                    contactPhone: lead.contactPhone || "",
+                    clientLinkedin: lead.clientLinkedin || "",
+                    country: lead.country,
+                    industry: lead.industry,
+                    estimatedValue: String(lead.estimatedValue),
+                    currency: lead.currency,
+                    description: lead.description,
+                  });
+                  setShowEdit(true);
+                }}
+              >
+                <Pencil className="mr-2 h-4 w-4" /> Edit lead
+              </Button>
+            )}
             {!dup && (
               <select
                 value={lead.stage}
@@ -168,7 +230,14 @@ function LeadDetail() {
                   (stage) =>
                     stage === lead.stage ||
                     Boolean(
-                      user && canMoveLeadStage(user.role, lead.stage, stage, lead.previousStage),
+                      user &&
+                      canMoveLeadStage(
+                        user.role,
+                        lead.stage,
+                        stage,
+                        lead.previousStage,
+                        lead.stageAdminLocked,
+                      ),
                     ),
                 ).map((stage) => (
                   <option key={stage}>{stage}</option>
@@ -272,6 +341,63 @@ function LeadDetail() {
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                 {lead.description}
               </p>
+              <div className="mt-5 border-t pt-4">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Supporting files
+                </div>
+                {files.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No supporting files uploaded.</p>
+                ) : (
+                  <ul className="divide-y text-sm">
+                    {files.map((file) => (
+                      <li
+                        key={file.id}
+                        className="flex flex-wrap items-center justify-between gap-2 py-2"
+                      >
+                        <span className="min-w-0 truncate">
+                          {file.name}
+                          {file.private && (
+                            <Lock className="ml-1 inline h-3 w-3 text-warning-foreground" />
+                          )}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            store.downloadStoredFile(
+                              file.storageBucket,
+                              file.storagePath,
+                              file.name,
+                            )
+                          }
+                        >
+                          <Download className="mr-2 h-4 w-4" /> Download
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {isAdmin && (
+                  <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={attachmentPrivate}
+                      onChange={(event) => setAttachmentPrivate(event.target.checked)}
+                    />
+                    Private/internal file
+                  </label>
+                )}
+                <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm hover:bg-accent/30">
+                  <FileUp className="h-4 w-4" />
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={upload}
+                    disabled={uploadingFile}
+                  />
+                  {uploadingFile ? "Uploading..." : "Upload supporting file"}
+                </label>
+              </div>
             </Card>
 
             <Card className="p-0 overflow-hidden">
@@ -288,10 +414,6 @@ function LeadDetail() {
                   <TabsTrigger value="calls">
                     <Phone className="mr-1 h-3 w-3" />
                     Discovery Calls
-                  </TabsTrigger>
-                  <TabsTrigger value="files">
-                    <FileUp className="mr-1 h-3 w-3" />
-                    Attachments
                   </TabsTrigger>
                 </TabsList>
 
@@ -332,16 +454,37 @@ function LeadDetail() {
                     />
                     <div className="flex justify-end gap-2">
                       {isAdmin && (
-                        <Button variant="outline" size="sm" onClick={() => post(true)}>
+                        <Button variant="outline" size="sm" onClick={() => void post(true)}>
                           <Lock className="mr-1 h-3 w-3" />
                           Private note
                         </Button>
                       )}
-                      <Button size="sm" onClick={() => post(false)}>
+                      <Button size="sm" onClick={() => void post(false)}>
                         Post comment
                       </Button>
                     </div>
                   </div>
+                  {isPartner && mentionableStaff.length > 0 && (
+                    <label className="block text-xs">
+                      Mention Admin or Super Admin (optional)
+                      <select
+                        multiple
+                        value={mentionedUserIds}
+                        onChange={(event) =>
+                          setMentionedUserIds(
+                            Array.from(event.target.selectedOptions, (option) => option.value),
+                          )
+                        }
+                        className="mt-1 min-h-24 w-full rounded-md border bg-background p-2 text-sm"
+                      >
+                        {mentionableStaff.map((staff) => (
+                          <option key={staff.id} value={staff.id}>
+                            @{staff.name} ({staff.role === "super_admin" ? "Super Admin" : "Admin"})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   <div className="space-y-2 border-t pt-3">
                     {activity
                       .filter(
@@ -416,64 +559,161 @@ function LeadDetail() {
                     </Button>
                   )}
                 </TabsContent>
-
-                <TabsContent value="files" className="p-5 pt-0 space-y-2">
-                  {files.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No attachments yet.</p>
-                  ) : (
-                    <ul className="divide-y text-sm">
-                      {files.map((f) => (
-                        <li key={f.id} className="flex items-center justify-between py-2">
-                          <div>
-                            <span>{f.name}</span>
-                            {f.private && (
-                              <Lock className="ml-1 inline h-3 w-3 text-warning-foreground" />
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(f.date).toLocaleDateString()}
-                            </span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                store.downloadStoredFile(f.storageBucket, f.storagePath, f.name)
-                              }
-                            >
-                              Download
-                            </Button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {isAdmin && (
-                    <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                      <input
-                        type="checkbox"
-                        checked={attachmentPrivate}
-                        onChange={(e) => setAttachmentPrivate(e.target.checked)}
-                      />
-                      Private/internal file
-                    </label>
-                  )}
-                  <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm hover:bg-accent/30">
-                    <FileUp className="h-4 w-4" />
-                    <input
-                      type="file"
-                      className="hidden"
-                      onChange={upload}
-                      disabled={uploadingFile}
-                    />
-                    {uploadingFile ? "Uploading..." : "Upload attachment"}
-                  </label>
-                </TabsContent>
               </Tabs>
             </Card>
           </div>
         </div>
       </PageContainer>
+
+      <FormDialog
+        open={showEdit}
+        onOpenChange={setShowEdit}
+        title="Edit lead"
+        description="Update the business and contact details for this opportunity."
+        submitLabel={savingEdit ? "Saving..." : "Save changes"}
+        canSubmit={
+          !savingEdit &&
+          Boolean(edit.company.trim()) &&
+          Boolean(edit.contactName.trim()) &&
+          Boolean(edit.contactTitle.trim()) &&
+          /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(edit.contactEmail) &&
+          Boolean(edit.country) &&
+          Boolean(edit.industry) &&
+          Number(edit.estimatedValue) > 0 &&
+          edit.description.trim().length >= 50
+        }
+        onSubmit={async () => {
+          setSavingEdit(true);
+          const saved = await store.updateOwnLead(id, {
+            company: edit.company.trim(),
+            contactName: edit.contactName.trim(),
+            contactTitle: edit.contactTitle.trim(),
+            contactEmail: edit.contactEmail.trim(),
+            contactPhone: edit.contactPhone.trim(),
+            clientLinkedin: edit.clientLinkedin.trim(),
+            country: edit.country,
+            industry: edit.industry,
+            estimatedValue: Number(edit.estimatedValue),
+            currency: edit.currency,
+            description: edit.description.trim(),
+          });
+          setSavingEdit(false);
+          if (!saved) return;
+          toast.success("Lead details updated.");
+          setShowEdit(false);
+        }}
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-xs">
+            Company name
+            <input
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={edit.company}
+              onChange={(event) => setEdit({ ...edit, company: event.target.value })}
+            />
+          </label>
+          <label className="text-xs">
+            Contact name
+            <input
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={edit.contactName}
+              onChange={(event) => setEdit({ ...edit, contactName: event.target.value })}
+            />
+          </label>
+          <label className="text-xs">
+            Job title
+            <input
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={edit.contactTitle}
+              onChange={(event) => setEdit({ ...edit, contactTitle: event.target.value })}
+            />
+          </label>
+          <label className="text-xs">
+            Contact email
+            <input
+              type="email"
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={edit.contactEmail}
+              onChange={(event) => setEdit({ ...edit, contactEmail: event.target.value })}
+            />
+          </label>
+          <label className="text-xs">
+            Contact phone (optional)
+            <input
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={edit.contactPhone}
+              onChange={(event) => setEdit({ ...edit, contactPhone: event.target.value })}
+            />
+          </label>
+          <label className="text-xs">
+            LinkedIn (optional)
+            <input
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={edit.clientLinkedin}
+              onChange={(event) => setEdit({ ...edit, clientLinkedin: event.target.value })}
+            />
+          </label>
+          <label className="text-xs">
+            Country
+            <select
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={edit.country}
+              onChange={(event) => setEdit({ ...edit, country: event.target.value })}
+            >
+              <option value="">Select country</option>
+              {COUNTRIES.map((country) => (
+                <option key={country}>{country}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs">
+            Industry
+            <select
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={edit.industry}
+              onChange={(event) => setEdit({ ...edit, industry: event.target.value })}
+            >
+              <option value="">Select industry</option>
+              {Array.from(new Set([...INDUSTRIES, ...store.settings.industries])).map(
+                (industry) => (
+                  <option key={industry}>{industry}</option>
+                ),
+              )}
+            </select>
+          </label>
+          <label className="text-xs">
+            Estimated value
+            <input
+              type="number"
+              min="0.01"
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={edit.estimatedValue}
+              onChange={(event) => setEdit({ ...edit, estimatedValue: event.target.value })}
+            />
+          </label>
+          <label className="text-xs">
+            Currency
+            <select
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={edit.currency}
+              onChange={(event) => setEdit({ ...edit, currency: event.target.value })}
+            >
+              {store.settings.currencies.map((currency) => (
+                <option key={currency}>{currency}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label className="text-xs">
+          Description (minimum 50 characters)
+          <textarea
+            rows={5}
+            className="mt-1 w-full rounded-md border bg-background p-3 text-sm"
+            value={edit.description}
+            onChange={(event) => setEdit({ ...edit, description: event.target.value })}
+          />
+        </label>
+      </FormDialog>
 
       <FormDialog
         open={showCall}

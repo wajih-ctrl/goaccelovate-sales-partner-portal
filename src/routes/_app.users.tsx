@@ -17,6 +17,7 @@ import { useState } from "react";
 import { FormDialog, ReasonDialog } from "@/components/common/dialogs";
 import { revokeRealInvitation, sendRealInvitation } from "@/lib/real-invitations";
 import { deleteRealUser } from "@/lib/real-users";
+import { PARTNER_AGREEMENT_EDITABLE_TEXT } from "@/lib/legal-documents";
 
 export const Route = createFileRoute("/_app/users")({ component: UsersPage });
 
@@ -43,6 +44,7 @@ function UsersPage() {
     email: "",
     role: "partner" as InviteRole,
     commissionRate: "10",
+    agreementText: PARTNER_AGREEMENT_EDITABLE_TEXT,
   });
   const [inviteLoading, setInviteLoading] = useState(false);
   const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
@@ -295,7 +297,9 @@ function UsersPage() {
           !!invite.email.trim() &&
           /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(invite.email) &&
           (invite.role !== "partner" ||
-            (Number(invite.commissionRate) > 0 && Number(invite.commissionRate) <= 100))
+            (Number(invite.commissionRate) > 0 &&
+              Number(invite.commissionRate) <= 100 &&
+              invite.agreementText.trim().length >= 100))
         }
         submitLabel={inviteLoading ? "Sending..." : "Send invitation"}
         onSubmit={async () => {
@@ -305,6 +309,7 @@ function UsersPage() {
             email: invite.email.trim(),
             role: invite.role,
             commissionRate: invite.role === "partner" ? Number(invite.commissionRate) : undefined,
+            agreementText: invite.role === "partner" ? invite.agreementText.trim() : undefined,
           };
           const result = await sendRealInvitation(payload);
           setInviteLoading(false);
@@ -324,7 +329,13 @@ function UsersPage() {
           );
           toast.success(`Invitation sent to ${invite.email}`);
           setShowInvite(false);
-          setInvite({ name: "", email: "", role: "partner", commissionRate: "10" });
+          setInvite({
+            name: "",
+            email: "",
+            role: "partner",
+            commissionRate: "10",
+            agreementText: PARTNER_AGREEMENT_EDITABLE_TEXT,
+          });
         }}
       >
         <label className="text-xs">
@@ -356,18 +367,34 @@ function UsersPage() {
           </select>
         </label>
         {invite.role === "partner" && (
-          <label className="text-xs">
-            Commission percentage
-            <input
-              type="number"
-              min="0.01"
-              max="100"
-              step="0.01"
-              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={invite.commissionRate}
-              onChange={(e) => setInvite({ ...invite, commissionRate: e.target.value })}
-            />
-          </label>
+          <>
+            <label className="text-xs">
+              Commission percentage
+              <input
+                type="number"
+                min="0.01"
+                max="100"
+                step="0.01"
+                className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={invite.commissionRate}
+                onChange={(e) => setInvite({ ...invite, commissionRate: e.target.value })}
+              />
+            </label>
+            <label className="text-xs">
+              Partner agreement text
+              <textarea
+                rows={14}
+                className="mt-1 w-full rounded-md border bg-background p-3 font-mono text-xs leading-5"
+                value={invite.agreementText}
+                onChange={(e) => setInvite({ ...invite, agreementText: e.target.value })}
+              />
+              <span className="mt-1 block text-muted-foreground">
+                Edit this invitation's agreement. Keep placeholders such as
+                {" {{COMMISSION_RATE}} "}
+                where dynamic values should appear.
+              </span>
+            </label>
+          </>
         )}
       </FormDialog>
 

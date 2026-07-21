@@ -28,6 +28,10 @@ type AgreementIssuer = {
   signed_at: string;
 };
 
+type InvitationAgreement = AgreementIssuer & {
+  agreement_text: string | null;
+};
+
 function LegalDocumentPage() {
   const { type } = Route.useParams();
   const navigate = useNavigate();
@@ -35,6 +39,7 @@ function LegalDocumentPage() {
   const { partners } = useStore();
   const [acceptance, setAcceptance] = useState<AgreementAcceptance | null>(null);
   const [issuer, setIssuer] = useState<AgreementIssuer | null>(null);
+  const [invitationAgreement, setInvitationAgreement] = useState<InvitationAgreement | null>(null);
   const [documentLoading, setDocumentLoading] = useState(user?.role === "partner");
 
   useEffect(() => {
@@ -54,12 +59,15 @@ function LegalDocumentPage() {
         .eq("agreement_documents.is_active", true)
         .maybeSingle(),
       (supabase as any).rpc("get_current_partner_agreement_issuer"),
+      (supabase as any).rpc("get_current_partner_invitation_agreement"),
     ])
-      .then(([acceptanceResult, issuerResult]) => {
+      .then(([acceptanceResult, issuerResult, invitationResult]) => {
         if (cancelled) return;
         setAcceptance((acceptanceResult.data as AgreementAcceptance | null) || null);
         const issuerRows = issuerResult.data as AgreementIssuer[] | null;
         setIssuer(issuerRows?.[0] || null);
+        const invitationRows = invitationResult.data as InvitationAgreement[] | null;
+        setInvitationAgreement(invitationRows?.[0] || null);
         setDocumentLoading(false);
       })
       .catch((error: unknown) => {
@@ -100,6 +108,7 @@ function LegalDocumentPage() {
   const agreement = type === "agreement";
   const title = agreement ? "Strategic Referral Partnership Agreement" : "Non-Disclosure Agreement";
   const sections = agreement ? PARTNER_AGREEMENT_SECTIONS : NDA_SECTIONS;
+  const customAgreementText = agreement ? invitationAgreement?.agreement_text?.trim() : "";
 
   return (
     <>
@@ -158,27 +167,33 @@ function LegalDocumentPage() {
               </p>
             </div>
 
-            {sections.map((section, index) => (
-              <section key={`${section.heading}-${index}`} className="space-y-3">
-                {section.heading && (
-                  <h2 className="text-base font-semibold text-slate-950 sm:text-lg">
-                    {section.heading}
-                  </h2>
-                )}
-                {section.paragraphs?.map((paragraph) => (
-                  <p key={paragraph} className="text-sm leading-7 text-slate-700 sm:text-base">
-                    {populateLegalText(paragraph, commissionRate)}
-                  </p>
-                ))}
-                {section.bullets && (
-                  <ul className="list-disc space-y-2 pl-6 text-sm leading-7 text-slate-700 sm:text-base">
-                    {section.bullets.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                )}
+            {customAgreementText ? (
+              <section className="whitespace-pre-wrap text-sm leading-7 text-slate-700 sm:text-base">
+                {populateLegalText(customAgreementText, commissionRate)}
               </section>
-            ))}
+            ) : (
+              sections.map((section, index) => (
+                <section key={`${section.heading}-${index}`} className="space-y-3">
+                  {section.heading && (
+                    <h2 className="text-base font-semibold text-slate-950 sm:text-lg">
+                      {section.heading}
+                    </h2>
+                  )}
+                  {section.paragraphs?.map((paragraph) => (
+                    <p key={paragraph} className="text-sm leading-7 text-slate-700 sm:text-base">
+                      {populateLegalText(paragraph, commissionRate)}
+                    </p>
+                  ))}
+                  {section.bullets && (
+                    <ul className="list-disc space-y-2 pl-6 text-sm leading-7 text-slate-700 sm:text-base">
+                      {section.bullets.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              ))
+            )}
 
             <section className="space-y-5 pt-4">
               <h2 className="text-lg font-semibold text-slate-950">Signatories</h2>

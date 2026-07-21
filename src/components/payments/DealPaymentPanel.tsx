@@ -37,8 +37,13 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
     (item) => item.leadId === lead.id && (!item.kind || item.kind === "Deal"),
   );
   const payable = Math.max(0, (commission?.eligibleAmount || 0) - (commission?.paidAmount || 0));
-  const advanceAllowed = canRecordClientPayment("Advance", lead.stage);
-  const finalAllowed = canRecordClientPayment("Final", lead.stage);
+  const currentCyclePayments = payments.filter(
+    (payment) => (payment.paymentCycle || 0) === (lead.paymentCycle || 0),
+  );
+  const advanceRecorded = currentCyclePayments.some((payment) => payment.paymentType === "Advance");
+  const finalRecorded = currentCyclePayments.some((payment) => payment.paymentType === "Final");
+  const advanceAllowed = canRecordClientPayment("Advance", lead.stage) && !advanceRecorded;
+  const finalAllowed = canRecordClientPayment("Final", lead.stage) && !finalRecorded;
 
   const openPayment = (type: PaymentType) => {
     setPaymentType(type);
@@ -66,11 +71,11 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
               onClick={() => openPayment("Advance")}
             >
               <Banknote className="mr-2 h-4 w-4" />
-              Record advance
+              {advanceRecorded ? "Advance recorded" : "Record advance"}
             </Button>
             <Button size="sm" disabled={!finalAllowed} onClick={() => openPayment("Final")}>
               <CheckCircle2 className="mr-2 h-4 w-4" />
-              Record final
+              {finalRecorded ? "Final recorded" : "Record final"}
             </Button>
           </div>
         </div>
@@ -91,11 +96,15 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
 
         <div className="mt-3 flex flex-col gap-1 border-t pt-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span>
-            {finalAllowed
-              ? "Advance and final payment milestones are available at this stage."
-              : advanceAllowed
-                ? "Advance payment is available. Final payment unlocks at Final Payment Clearance."
-                : "Advance payment unlocks when the deal reaches Advance Confirmed."}
+            {finalRecorded
+              ? "Advance and final payments have been recorded for this payment cycle."
+              : advanceRecorded
+                ? "Advance payment recorded. Final payment unlocks at Final Payment Clearance."
+                : finalAllowed
+                  ? "Advance and final payment milestones are available at this stage."
+                  : advanceAllowed
+                    ? "Advance payment is available. Final payment unlocks at Final Payment Clearance."
+                    : "Advance payment unlocks when the deal reaches Advance Confirmed."}
           </span>
           <span className="font-medium text-foreground">
             Partner commission payable now: {fmtCurrency(payable)}

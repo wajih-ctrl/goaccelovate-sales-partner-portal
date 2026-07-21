@@ -59,7 +59,7 @@ async function expectValue(actual, expected, label) {
   }
 }
 
-async function within(promise, label, timeoutMs = 15000) {
+async function within(promise, label, timeoutMs = 30000) {
   let timeout;
   try {
     return await Promise.race([
@@ -116,6 +116,8 @@ async function resetLead(stage = "Identified Opportunity", previousStage = null)
         status: "Open",
         confirmed_value: null,
         closed_reason: null,
+        stage_admin_locked: false,
+        payment_cycle: 0,
       })
       .eq("id", seeded.leadId),
     `Reset lead to ${stage}`,
@@ -153,6 +155,7 @@ async function cleanup() {
 
 try {
   const adminAccount = await createAccount("admin", "admin");
+  const superAdminAccount = await createAccount("super-admin", "super_admin");
   const partnerAccount = await createAccount("partner", "partner");
   const partner = await must(
     service
@@ -220,6 +223,7 @@ try {
   seeded.leadId = lead.id;
 
   const admin = await signIn(adminAccount);
+  const superAdmin = await signIn(superAdminAccount);
   const partnerClient = await signIn(partnerAccount);
 
   const agreementIssuers = await must(
@@ -313,6 +317,30 @@ try {
   );
   await expectValue(duplicatePhoneRows.length, 0, "Duplicate phone creates no lead");
 
+  const editedLead = await must(
+    partnerClient.rpc("update_own_partner_lead", {
+      target_lead: lead.id,
+      company_name: `Flow Company ${stamp}`,
+      contact_name: "Flow Contact",
+      contact_title: "Director",
+      contact_email: `flow-contact-${stamp}@example.com`,
+      contact_phone: "",
+      client_linkedin: "",
+      country: "Pakistan",
+      industry: "Technology",
+      estimated_value: 1000,
+      currency: "USD",
+      description:
+        "Updated by the Sales Partner during live verification with sufficient business context.",
+    }),
+    "Partner edits own lead",
+  );
+  await expectValue(editedLead.contact_title, "Director", "Partner lead edit persisted");
+  await expectError(
+    partnerClient.rpc("delete_own_partner_lead", { target_lead: lead.id }),
+    "Partner lead delete denied",
+  );
+
   const partnerStages = ["Outreach Started", "In Communication", "Discovery Call"];
   for (const stage of partnerStages) {
     await resetLead();
@@ -326,6 +354,24 @@ try {
     );
     await expectValue(moved.stage, stage, `Partner stage ${stage}`);
   }
+
+  await resetLead();
+  await must(
+    admin.rpc("update_lead_stage_secure", {
+      target_lead: lead.id,
+      target_stage: "Outreach Started",
+      change_reason: null,
+    }),
+    "Admin takes ownership of partner-controlled stage",
+  );
+  await expectError(
+    partnerClient.rpc("update_lead_stage_secure", {
+      target_lead: lead.id,
+      target_stage: "In Communication",
+      change_reason: null,
+    }),
+    "Partner stage change locked after Admin update",
+  );
 
   const adminStages = [
     "Contract Sent",
@@ -484,12 +530,19 @@ try {
   const firstPayout = await must(
     partnerClient.rpc("request_commission_payout", {
       commission_ids: [commission.id],
+      requested_amount: 20,
+      preferred_bank: "Verification Bank",
+      preferred_method: "Bank Transfer",
+      liable_for_taxes: true,
       message: "Advance commission payout",
     }),
     "Request advance payout",
   );
   seeded.payoutIds.push(firstPayout.id);
   await expectValue(Number(firstPayout.amount), 20, "Advance payout amount");
+  await expectValue(firstPayout.preferred_bank, "Verification Bank", "Preferred payout bank");
+  await expectValue(firstPayout.preferred_payment_method, "Bank Transfer", "Payout method");
+  await expectValue(firstPayout.tax_liability, true, "Payout tax liability");
   await expectBlockedMutation(
     admin
       .from("payout_requests")
@@ -503,13 +556,31 @@ try {
     "Verify direct payout update",
   );
   await expectValue(statusAfterDirectUpdate.status, "Pending", "Blocked payout status");
-  await must(
+  await expectError(
     admin.rpc("review_payout_request", {
       target_payout: firstPayout.id,
       approve_request: true,
       rejection_reason: null,
     }),
-    "Approve advance payout",
+    "Admin payout approval denied",
+  );
+  await must(
+    superAdmin.rpc("review_payout_request", {
+      target_payout: firstPayout.id,
+      approve_request: true,
+      rejection_reason: null,
+    }),
+    "Super Admin approves advance payout",
+  );
+  await expectError(
+    admin.rpc("record_payout_paid", {
+      target_payout: firstPayout.id,
+      payment_amount: 20,
+      paid_on: new Date().toISOString().slice(0, 10),
+      method: "Bank Transfer",
+      reference: `ADMIN-DENIED-${stamp}`,
+    }),
+    "Admin payout payment denied",
   );
 
   let resolvePayoutEvent;
@@ -553,9 +624,11 @@ try {
     }),
     "Partner Realtime subscription",
   );
+  // Give Realtime's Postgres binding a moment to settle after the channel handshake.
+  await new Promise((resolve) => setTimeout(resolve, 750));
 
   await must(
-    admin.rpc("record_payout_paid", {
+    superAdmin.rpc("record_payout_paid", {
       target_payout: firstPayout.id,
       payment_amount: 20,
       paid_on: new Date().toISOString().slice(0, 10),
@@ -584,6 +657,10 @@ try {
   await expectError(
     partnerClient.rpc("request_commission_payout", {
       commission_ids: [commission.id],
+      requested_amount: 1,
+      preferred_bank: "Verification Bank",
+      preferred_method: "Bank Transfer",
+      liable_for_taxes: true,
       message: "No balance should remain",
     }),
     "No duplicate payout before final payment",
@@ -610,6 +687,10 @@ try {
   const rejectedPayout = await must(
     partnerClient.rpc("request_commission_payout", {
       commission_ids: [commission.id],
+      requested_amount: 80,
+      preferred_bank: "Verification Bank",
+      preferred_method: "Wire Transfer",
+      liable_for_taxes: false,
       message: "Remaining commission payout",
     }),
     "Request remaining payout",
@@ -617,7 +698,7 @@ try {
   seeded.payoutIds.push(rejectedPayout.id);
   await expectValue(Number(rejectedPayout.amount), 80, "Remaining payout amount");
   await expectError(
-    admin.rpc("review_payout_request", {
+    superAdmin.rpc("review_payout_request", {
       target_payout: rejectedPayout.id,
       approve_request: false,
       rejection_reason: "",
@@ -625,7 +706,7 @@ try {
     "Payout rejection reason required",
   );
   await must(
-    admin.rpc("review_payout_request", {
+    superAdmin.rpc("review_payout_request", {
       target_payout: rejectedPayout.id,
       approve_request: false,
       rejection_reason: "Verification rejection reason.",
@@ -636,13 +717,17 @@ try {
   const finalPayout = await must(
     partnerClient.rpc("request_commission_payout", {
       commission_ids: [commission.id],
+      requested_amount: 80,
+      preferred_bank: "Verification Bank",
+      preferred_method: "ACH Transfer",
+      liable_for_taxes: false,
       message: "Retry remaining commission payout",
     }),
     "Retry remaining payout",
   );
   seeded.payoutIds.push(finalPayout.id);
   await must(
-    admin.rpc("review_payout_request", {
+    superAdmin.rpc("review_payout_request", {
       target_payout: finalPayout.id,
       approve_request: true,
       rejection_reason: null,
@@ -650,7 +735,7 @@ try {
     "Approve final payout",
   );
   await expectError(
-    admin.rpc("record_payout_paid", {
+    superAdmin.rpc("record_payout_paid", {
       target_payout: finalPayout.id,
       payment_amount: 79,
       paid_on: new Date().toISOString().slice(0, 10),
@@ -660,7 +745,7 @@ try {
     "External payout amount must match approved amount",
   );
   await must(
-    admin.rpc("record_payout_paid", {
+    superAdmin.rpc("record_payout_paid", {
       target_payout: finalPayout.id,
       payment_amount: 80,
       paid_on: new Date().toISOString().slice(0, 10),

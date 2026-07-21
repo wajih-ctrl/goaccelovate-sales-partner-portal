@@ -75,6 +75,8 @@ export interface Lead {
   confirmedValue?: number;
   duplicateReason?: string;
   previousStage?: LeadStage;
+  stageAdminLocked?: boolean;
+  paymentCycle?: number;
 }
 
 export interface Commission {
@@ -104,6 +106,9 @@ export interface Payout {
   reference?: string;
   message?: string;
   rejectReason?: string;
+  preferredBank?: string;
+  preferredMethod?: "Bank Transfer" | "ACH Transfer" | "Wire Transfer";
+  taxLiability?: boolean;
 }
 
 export interface ClientPayment {
@@ -115,6 +120,7 @@ export interface ClientPayment {
   method: string;
   notes?: string;
   paymentType?: "Advance" | "Final";
+  paymentCycle?: number;
 }
 
 export interface DiscoveryCall {
@@ -159,6 +165,29 @@ export interface Announcement {
   target: string;
   date: string;
   readBy: string[];
+  attachmentName?: string;
+  attachmentBucket?: string;
+  attachmentPath?: string;
+  attachmentType?: string;
+  attachmentSize?: number;
+  comments: AnnouncementComment[];
+  reactions: AnnouncementReaction[];
+}
+
+export interface AnnouncementComment {
+  id: string;
+  announcementId: string;
+  actorId: string;
+  actorName: string;
+  body: string;
+  date: string;
+}
+
+export interface AnnouncementReaction {
+  id: string;
+  announcementId: string;
+  actorId: string;
+  reaction: "Like" | "Celebrate" | "Insightful";
 }
 
 export interface Notification {

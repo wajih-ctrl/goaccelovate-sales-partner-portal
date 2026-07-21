@@ -88,7 +88,9 @@ export function PipelineListPanel() {
   const changeStage = (leadId: string, target: LeadStage) => {
     const lead = leads.find((item) => item.id === leadId);
     if (!lead || lead.stage === target || !user) return;
-    if (!canMoveLeadStage(user.role, lead.stage, target, lead.previousStage)) {
+    if (
+      !canMoveLeadStage(user.role, lead.stage, target, lead.previousStage, lead.stageAdminLocked)
+    ) {
       toast.error("You do not have permission to move this lead to that stage.");
       return;
     }
@@ -159,6 +161,15 @@ export function PipelineListPanel() {
             placeholder="Min value"
             className="h-9 w-28 rounded-md border bg-background px-3 text-sm"
           />
+          <select
+            value={sortDesc ? "descending" : "ascending"}
+            onChange={(event) => setSortDesc(event.target.value === "descending")}
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            aria-label="Sort by deal value"
+          >
+            <option value="ascending">Value: Ascending</option>
+            <option value="descending">Value: Descending</option>
+          </select>
           <input
             type="number"
             value={maxValue}
@@ -196,12 +207,7 @@ export function PipelineListPanel() {
                 <th className="px-4 py-3 text-left">Region</th>
                 <th className="px-4 py-3 text-left">Stage</th>
                 <th className="px-4 py-3 text-left">Status</th>
-                <th
-                  className="cursor-pointer px-4 py-3 text-right"
-                  onClick={() => setSortDesc((value) => !value)}
-                >
-                  Value {sortDesc ? "Down" : "Up"}
-                </th>
+                <th className="px-4 py-3 text-right">Value</th>
                 <th className="px-4 py-3 text-left">Last activity</th>
               </tr>
             </thead>
@@ -228,7 +234,12 @@ export function PipelineListPanel() {
                         className="h-8 max-w-56 rounded-md border bg-background px-2 text-xs"
                       >
                         {(user
-                          ? allowedLeadStageTargets(user.role, lead.stage, lead.previousStage)
+                          ? allowedLeadStageTargets(
+                              user.role,
+                              lead.stage,
+                              lead.previousStage,
+                              lead.stageAdminLocked,
+                            )
                           : [lead.stage]
                         ).map((item) => (
                           <option key={item}>{item}</option>

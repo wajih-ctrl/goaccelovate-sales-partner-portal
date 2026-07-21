@@ -297,7 +297,9 @@ export function canMoveLeadStage(
   currentStage: LeadStage,
   targetStage: LeadStage,
   previousStage?: LeadStage,
+  stageAdminLocked = false,
 ) {
+  if (role === "partner" && stageAdminLocked) return false;
   if (currentStage === "On Hold") {
     if (!previousStage || targetStage !== previousStage) return false;
     if (role === "admin" || role === "super_admin") return true;
@@ -315,11 +317,12 @@ export function allowedLeadStageTargets(
   role: Role,
   currentStage: LeadStage,
   previousStage?: LeadStage,
+  stageAdminLocked = false,
 ) {
   return LEAD_STAGES.filter(
     (targetStage) =>
       targetStage === currentStage ||
-      canMoveLeadStage(role, currentStage, targetStage, previousStage),
+      canMoveLeadStage(role, currentStage, targetStage, previousStage, stageAdminLocked),
   );
 }
 

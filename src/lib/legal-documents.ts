@@ -181,6 +181,20 @@ export const NDA_SECTIONS: LegalSection[] = [
   },
 ];
 
+function sectionsToEditableText(sections: LegalSection[]) {
+  return sections
+    .flatMap((section) => [
+      section.heading,
+      ...(section.paragraphs || []),
+      ...(section.bullets || []).map((item) => `- ${item}`),
+      "",
+    ])
+    .join("\n")
+    .trim();
+}
+
+export const PARTNER_AGREEMENT_EDITABLE_TEXT = sectionsToEditableText(PARTNER_AGREEMENT_SECTIONS);
+
 export function populateLegalText(text: string, commissionRate: number) {
   return text
     .replaceAll("{{COMMISSION_RATE}}", `${commissionRate}%`)

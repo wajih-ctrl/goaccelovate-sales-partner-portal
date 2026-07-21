@@ -10,7 +10,12 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { useAuth } from "./auth";
-import { buildStoragePath, STORAGE_BUCKETS, validateUploadFile } from "./file-upload";
+import {
+  buildStoragePath,
+  STORAGE_BUCKETS,
+  validateAnnouncementFile,
+  validateUploadFile,
+} from "./file-upload";
 import type { Json } from "./database.types";
 import { isSupabaseConfigured, supabase } from "./supabase";
 import { isAnnouncementTargeted } from "./announcements";
@@ -47,6 +52,8 @@ export interface Settings {
   pipelineLabels: string[];
   onboardingSteps: string[];
   tierLabels: string[];
+  announcementAttachmentMaxBytes: number;
+  welcomeIntroVideoUrl: string;
 }
 
 export interface InvitedUser {
@@ -110,8 +117,15 @@ interface AppActions {
   ) => Promise<Lead>;
   updateLeadStage: (id: string, stage: LeadStage, actor: string, reason?: string) => void;
   updateLeadStatus: (id: string, status: LeadStatus, actor: string, reason?: string) => void;
+  updateOwnLead: (leadId: string, patch: Partial<Lead>) => Promise<boolean>;
   closeLeadWon: (id: string, confirmedValue: number, actor: string) => void;
-  addComment: (leadId: string, text: string, actor: string, isPrivate?: boolean) => void;
+  addComment: (
+    leadId: string,
+    text: string,
+    actor: string,
+    isPrivate?: boolean,
+    mentionedUserIds?: string[],
+  ) => Promise<boolean>;
   addAttachment: (
     leadId: string,
     file: File,
@@ -150,7 +164,13 @@ interface AppActions {
   requestPayout: (
     partnerId: string,
     commissionIds: string[],
-    message: string,
+    payload: {
+      amount: number;
+      preferredBank: string;
+      preferredMethod: "Bank Transfer" | "ACH Transfer" | "Wire Transfer";
+      taxLiability: boolean;
+      message: string;
+    },
     actor: string,
   ) => Promise<boolean>;
   approvePayout: (payoutId: string, actor: string) => Promise<boolean>;
@@ -166,7 +186,17 @@ interface AppActions {
     actor: string,
   ) => Promise<boolean>;
   // Announcements
-  publishAnnouncement: (a: Omit<Announcement, "id" | "date" | "readBy">, actor: string) => void;
+  publishAnnouncement: (
+    a: Omit<Announcement, "id" | "date" | "readBy" | "comments" | "reactions"> & {
+      attachmentFile?: File;
+    },
+    actor: string,
+  ) => Promise<boolean>;
+  addAnnouncementComment: (announcementId: string, body: string) => Promise<boolean>;
+  setAnnouncementReaction: (
+    announcementId: string,
+    reaction: "Like" | "Celebrate" | "Insightful" | null,
+  ) => Promise<boolean>;
   markAnnouncementRead: (id: string, partnerId: string) => void;
   // Notifications
   markNotificationRead: (id: string) => void;
@@ -225,6 +255,8 @@ const DEFAULT_SETTINGS: Settings = {
   pipelineLabels: [...LEAD_STAGES],
   onboardingSteps: ONBOARDING_STEPS.map((s) => s.label),
   tierLabels: ["Associate", "Specialist", "Partner"],
+  announcementAttachmentMaxBytes: 2 * 1024 * 1024,
+  welcomeIntroVideoUrl: "https://www.youtube.com/@GoAccelovate",
 };
 
 const EMPTY_ONBOARDING: Record<string, Record<string, boolean>> = {};
@@ -436,12 +468,14 @@ function buildDisplayContext(data: {
 const publicId = (prefix: string) => `${prefix}-${Math.floor(Math.random() * 90000 + 10000)}`;
 
 function announcementTarget(target: string, partners: Partner[]) {
-  if (target === "All portal users") return { target_type: "all_users", target_rules: {} };
-  if (target === "Admin users")
+  if (["All Portal Partners", "All portal users"].includes(target))
+    return { target_type: "all_users", target_rules: {} };
+  if (["All Admin Users", "Admin users"].includes(target))
     return { target_type: "staff_roles", target_rules: { roles: ["admin", "super_admin"] } };
   if (target === "Super Admin users")
     return { target_type: "staff_roles", target_rules: { roles: ["super_admin"] } };
-  if (target === "All partners") return { target_type: "all_partners", target_rules: {} };
+  if (["All Sales Partners", "All partners"].includes(target))
+    return { target_type: "all_partners", target_rules: {} };
   if (target === "Partner tier")
     return { target_type: "tier", target_rules: { tiers: ["Partner"] } };
   if (target === "Specialist tier")
@@ -465,8 +499,8 @@ function announcementTarget(target: string, partners: Partner[]) {
       target_type: "region",
       target_rules: { countries: ["USA", "Brazil", "Mexico", "Chile"] },
     };
-  if (target.startsWith("Selected partners:")) {
-    const raw = target.replace("Selected partners:", "");
+  if (target.startsWith("Selected partners:") || target.startsWith("Selected Sales Partners:")) {
+    const raw = target.replace(/^Selected (?:Sales Partners|partners):/, "");
     const tokens = raw
       .split(",")
       .map((item) => item.trim().toLowerCase())
@@ -522,6 +556,8 @@ function mapLead(row: any): Lead {
     confirmedValue: row.confirmed_value == null ? undefined : Number(row.confirmed_value),
     duplicateReason: row.duplicate_reason || undefined,
     previousStage: row.previous_stage || undefined,
+    stageAdminLocked: Boolean(row.stage_admin_locked),
+    paymentCycle: Number(row.payment_cycle || 0),
   };
 }
 
@@ -557,6 +593,9 @@ function mapPayout(row: any, items: any[]): Payout {
     reference: row.transaction_reference || undefined,
     message: row.message || undefined,
     rejectReason: row.reject_reason || undefined,
+    preferredBank: row.preferred_bank || undefined,
+    preferredMethod: row.preferred_payment_method || undefined,
+    taxLiability: row.tax_liability == null ? undefined : Boolean(row.tax_liability),
   };
 }
 
@@ -570,6 +609,7 @@ function mapClientPayment(row: any): ClientPayment {
     method: row.payment_method,
     notes: row.notes || undefined,
     paymentType: row.payment_type || undefined,
+    paymentCycle: Number(row.payment_cycle || 0),
   };
 }
 
@@ -629,7 +669,7 @@ function mapNotification(row: any, context: DisplayContext): Notification {
   };
 }
 
-function mapAnnouncement(row: any, reads: any[]): Announcement {
+function mapAnnouncement(row: any, reads: any[], comments: any[], reactions: any[]): Announcement {
   return {
     id: row.id,
     title: row.title,
@@ -638,6 +678,29 @@ function mapAnnouncement(row: any, reads: any[]): Announcement {
     target: row.target_type,
     date: row.published_at,
     readBy: reads.filter((read) => read.announcement_id === row.id).map((read) => read.partner_id),
+    attachmentName: row.attachment_name || undefined,
+    attachmentBucket: row.attachment_bucket || undefined,
+    attachmentPath: row.attachment_path || undefined,
+    attachmentType: row.attachment_type || undefined,
+    attachmentSize: row.attachment_size == null ? undefined : Number(row.attachment_size),
+    comments: comments
+      .filter((comment) => comment.announcement_id === row.id)
+      .map((comment) => ({
+        id: comment.id,
+        announcementId: comment.announcement_id,
+        actorId: comment.actor_id,
+        actorName: comment.actor_name,
+        body: comment.body,
+        date: comment.created_at,
+      })),
+    reactions: reactions
+      .filter((reaction) => reaction.announcement_id === row.id)
+      .map((reaction) => ({
+        id: reaction.id,
+        announcementId: reaction.announcement_id,
+        actorId: reaction.actor_id,
+        reaction: reaction.reaction,
+      })),
   };
 }
 
@@ -688,6 +751,12 @@ function mapSettings(rows: any[]): Settings {
     industries: value("industries", DEFAULT_SETTINGS.industries) as string[],
     pipelineLabels: value("pipeline_stage_labels", DEFAULT_SETTINGS.pipelineLabels) as string[],
     tierLabels: value("partner_tier_labels", DEFAULT_SETTINGS.tierLabels) as string[],
+    announcementAttachmentMaxBytes: Number(
+      value("announcement_attachment_max_bytes", DEFAULT_SETTINGS.announcementAttachmentMaxBytes),
+    ),
+    welcomeIntroVideoUrl: String(
+      value("welcome_intro_video_url", DEFAULT_SETTINGS.welcomeIntroVideoUrl),
+    ),
   };
 }
 
@@ -804,6 +873,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       activityRes,
       announcementsRes,
       announcementReadsRes,
+      announcementCommentsRes,
+      announcementReactionsRes,
       notificationsRes,
       auditRes,
       onboardingRes,
@@ -837,6 +908,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ? skippedQuery()
         : supabase.from("announcements").select("*").order("published_at", { ascending: false }),
       isPreAgreementPartner ? skippedQuery() : supabase.from("announcement_reads").select("*"),
+      isPreAgreementPartner
+        ? skippedQuery()
+        : (supabase as any)
+            .from("announcement_comments")
+            .select("*")
+            .order("created_at", { ascending: true }),
+      isPreAgreementPartner
+        ? skippedQuery()
+        : (supabase as any).from("announcement_reactions").select("*"),
       supabase.from("notifications").select("*").order("created_at", { ascending: false }),
       canViewAudit
         ? supabase.from("audit_log").select("*").order("created_at", { ascending: false })
@@ -880,6 +960,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       activityRes,
       announcementsRes,
       announcementReadsRes,
+      announcementCommentsRes,
+      announcementReactionsRes,
       notificationsRes,
       auditRes,
       onboardingRes,
@@ -894,6 +976,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     const payoutItems = payoutItemsRes.data || [];
     const reads = announcementReadsRes.data || [];
+    const announcementComments = announcementCommentsRes.data || [];
+    const announcementReactions = announcementReactionsRes.data || [];
     const displayContext = buildDisplayContext({
       profiles: profilesRes.data || [],
       partners: partnersRes.data || [],
@@ -914,7 +998,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setClientPayments((clientPaymentsRes.data || []).map(mapClientPayment));
     setCalls((callsRes.data || []).map(mapCall));
     setActivity((activityRes.data || []).map(mapActivity));
-    setAnnouncements((announcementsRes.data || []).map((row) => mapAnnouncement(row, reads)));
+    setAnnouncements(
+      (announcementsRes.data || []).map((row) =>
+        mapAnnouncement(row, reads, announcementComments, announcementReactions),
+      ),
+    );
     setNotifications(
       (notificationsRes.data || []).map((row) => mapNotification(row, displayContext)),
     );
@@ -975,7 +1063,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     const previousAccess = hydratedAccessRef.current;
     const unlockingPartner =
-      previousAccess?.userId === businessUserId &&
+      previousAccess !== null &&
+      previousAccess.userId === businessUserId &&
       previousAccess.role === "partner" &&
       businessUserRole === "partner" &&
       previousAccess.agreementsComplete !== true &&
@@ -1010,10 +1099,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     refreshSupabaseState,
   ]);
 
-  const handleWriteError = useCallback((error: unknown, fallback = "Supabase write failed.") => {
-    console.error(error);
-    toast.error(error instanceof Error ? error.message : fallback);
-  }, []);
+  const handleWriteError = useCallback(
+    (error: unknown, fallback = "Unable to save this change. Please try again.") => {
+      console.error(error);
+      const raw =
+        error && typeof error === "object" && "message" in error
+          ? String((error as { message?: unknown }).message || "")
+          : error instanceof Error
+            ? error.message
+            : "";
+      const message = /failed to fetch|network|load failed/i.test(raw)
+        ? "The portal could not reach Supabase. Check your connection and try again."
+        : /jwt|session|refresh token/i.test(raw)
+          ? "Your session expired. Sign in again, then retry the action."
+          : /row-level security|permission denied|not authorized/i.test(raw)
+            ? "You do not have permission to make this change."
+            : /duplicate key|already exists|unique constraint/i.test(raw)
+              ? "This record already exists. Refresh the page and review the existing entry."
+              : raw && !/^supabase write failed\.?$/i.test(raw)
+                ? raw
+                : fallback;
+      toast.error(message);
+    },
+    [],
+  );
 
   const reloadAfterWrite = useCallback(() => {
     if (!realMode) return;
@@ -1083,6 +1192,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, () =>
         reloadAfterWrite(),
       )
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcements" }, () =>
+        reloadAfterWrite(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "announcement_comments" },
+        () => reloadAfterWrite(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "announcement_reactions" },
+        () => reloadAfterWrite(),
+      )
       .subscribe();
 
     return () => {
@@ -1143,34 +1265,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
   };
 
-  const persistCurrentNotification = (n: Omit<Notification, "id" | "date" | "read">) => {
-    if (!realMode || !supabase || !user?.id || user.role === "partner") return;
-    void supabase
-      .from("notifications")
-      .insert({
-        recipient_id: user.id,
-        title: n.title,
-        body: n.body,
-        type: n.type,
-        mandatory: Boolean(n.mandatory),
-      })
-      .then(({ error }) => {
-        if (error) handleWriteError(error);
-      });
-  };
-
-  const notify = (
-    n: Omit<Notification, "id" | "date" | "read">,
-    options: { persist?: boolean } = {},
-  ) => {
+  const notify = (n: Omit<Notification, "id" | "date" | "read">) => {
+    if (realMode) return;
     setNotifications((ns) => [{ ...n, id: uid("N"), date: nowIso(), read: false }, ...ns]);
-    if (options.persist !== false) persistCurrentNotification(n);
   };
 
   const notifyPartner = useCallback(
     async (partnerId: string, payload: Omit<Notification, "id" | "date" | "read">) => {
-      notify(payload, { persist: false });
-      if (!realMode || !supabase) return;
+      if (!realMode || !supabase) {
+        notify(payload);
+        return;
+      }
       const { error } = await supabase.from("notifications").insert({
         partner_id: partnerId,
         title: payload.title,
@@ -1283,7 +1388,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (id, stage, actor, reason) => {
       const existing = leads.find((lead) => lead.id === id);
       if (!existing || !user) return;
-      if (!canMoveLeadStage(user.role, existing.stage, stage, existing.previousStage)) {
+      if (
+        !canMoveLeadStage(
+          user.role,
+          existing.stage,
+          stage,
+          existing.previousStage,
+          existing.stageAdminLocked,
+        )
+      ) {
         toast.error("Your role cannot move this lead to that stage.");
         return;
       }
@@ -1322,6 +1435,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   ? "Closed Lost"
                   : "Open",
             lastActivity: nowIso(),
+            stageAdminLocked:
+              user.role === "admin" || user.role === "super_admin" ? true : l.stageAdminLocked,
           } as Lead;
           // Auto-create commission on Closed Won
           if (stage === "Closed Won") {
@@ -1420,11 +1535,60 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [handleWriteError, leads, notifyPartner, realMode, reloadAfterWrite],
   );
 
+  const updateOwnLead: AppActions["updateOwnLead"] = useCallback(
+    async (leadId, patch) => {
+      const existing = leads.find((lead) => lead.id === leadId);
+      if (!existing || user?.role !== "partner" || existing.partnerId !== user.partnerId) {
+        toast.error("You can edit only your own leads.");
+        return false;
+      }
+      if (realMode && supabase) {
+        const next = { ...existing, ...patch };
+        const { data, error } = await (supabase as any).rpc("update_own_partner_lead", {
+          target_lead: leadId,
+          company_name: next.company,
+          contact_name: next.contactName,
+          contact_title: next.contactTitle,
+          contact_email: next.contactEmail,
+          contact_phone: next.contactPhone || "",
+          client_linkedin: next.clientLinkedin || "",
+          country: next.country,
+          industry: next.industry,
+          estimated_value: next.estimatedValue,
+          currency: next.currency,
+          description: next.description,
+        });
+        if (error) {
+          handleWriteError(error, "Unable to update the lead.");
+          return false;
+        }
+        setLeads((current) => current.map((lead) => (lead.id === leadId ? mapLead(data) : lead)));
+        reloadAfterWrite();
+        return true;
+      }
+      setLeads((current) =>
+        current.map((lead) =>
+          lead.id === leadId ? { ...lead, ...patch, lastActivity: nowIso() } : lead,
+        ),
+      );
+      return true;
+    },
+    [handleWriteError, leads, realMode, reloadAfterWrite, user],
+  );
+
   const closeLeadWon: AppActions["closeLeadWon"] = useCallback(
     (id, confirmedValue, actor) => {
       const lead = leads.find((l) => l.id === id);
       if (!lead || !user) return;
-      if (!canMoveLeadStage(user.role, lead.stage, "Closed Won", lead.previousStage)) {
+      if (
+        !canMoveLeadStage(
+          user.role,
+          lead.stage,
+          "Closed Won",
+          lead.previousStage,
+          lead.stageAdminLocked,
+        )
+      ) {
         toast.error("Only Admin or Super Admin can close a deal as won.");
         return;
       }
@@ -1443,6 +1607,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 stage: "Closed Won",
                 status: "Closed Won",
                 confirmedValue,
+                stageAdminLocked: true,
                 lastActivity: nowIso(),
               }
             : l,
@@ -1514,8 +1679,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const addComment: AppActions["addComment"] = useCallback(
-    (leadId, text, actor, isPrivate) => {
-      const lead = leads.find((item) => item.id === leadId);
+    async (leadId, text, actor, isPrivate = false, mentionedUserIds = []) => {
+      if (realMode && supabase) {
+        const { data, error } = await (supabase as any).rpc("add_lead_comment_secure", {
+          target_lead: leadId,
+          comment_text: text,
+          private_comment: isPrivate,
+          mentioned_users: mentionedUserIds,
+        });
+        if (error) {
+          handleWriteError(error, "Unable to post the comment.");
+          return false;
+        }
+        if (data) setActivity((current) => [mapActivity(data), ...current]);
+        setLeads((current) =>
+          current.map((lead) => (lead.id === leadId ? { ...lead, lastActivity: nowIso() } : lead)),
+        );
+        reloadAfterWrite();
+        return true;
+      }
       pushActivity({
         leadId,
         type: isPrivate ? "admin_note" : "comment",
@@ -1530,16 +1712,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           body: `${leadId} - ${actor}: ${text.slice(0, 80)}`,
           type: "info",
         });
-        if (realMode && lead) {
-          void notifyPartner(lead.partnerId, {
-            title: "New lead comment",
-            body: `${lead.company}: ${text.slice(0, 160)}`,
-            type: "info",
-          });
-        }
       }
+      return true;
     },
-    [leads, notifyPartner, realMode],
+    [handleWriteError, realMode, reloadAfterWrite, user?.role],
   );
 
   const addAttachment: AppActions["addAttachment"] = useCallback(
@@ -1630,6 +1806,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     async (leadId, actor) => {
       const lead = leads.find((item) => item.id === leadId);
       if (!lead) return false;
+      if (user?.role === "partner") {
+        toast.error("Sales Partners cannot delete leads.");
+        return false;
+      }
       if (realMode && supabase) {
         const storedFiles = attachments[leadId] || [];
         const paths = storedFiles
@@ -1669,7 +1849,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       reloadAfterWrite();
       return true;
     },
-    [attachments, handleWriteError, leads, realMode, reloadAfterWrite],
+    [attachments, handleWriteError, leads, realMode, reloadAfterWrite, user?.role],
   );
 
   const updateEstimatedValue: AppActions["updateEstimatedValue"] = useCallback(
@@ -2049,18 +2229,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const requestPayout: AppActions["requestPayout"] = useCallback(
-    async (partnerId, commissionIds, message, actor) => {
-      const amount = commissions
+    async (partnerId, commissionIds, payload, actor) => {
+      const availableAmount = commissions
         .filter((c) => commissionIds.includes(c.id))
         .reduce((s, c) => s + Math.max(0, (c.eligibleAmount || c.amount) - (c.paidAmount || 0)), 0);
-      if (amount <= 0) {
+      if (availableAmount <= 0 || payload.amount <= 0 || payload.amount > availableAmount) {
         toast.error("Select at least one payable commission.");
         return false;
       }
       if (realMode && supabase) {
-        const { error } = await supabase.rpc("request_commission_payout", {
+        const { error } = await (supabase as any).rpc("request_commission_payout", {
           commission_ids: commissionIds,
-          message,
+          requested_amount: payload.amount,
+          preferred_bank: payload.preferredBank,
+          preferred_method: payload.preferredMethod,
+          liable_for_taxes: payload.taxLiability,
+          message: payload.message,
         });
         if (error) {
           handleWriteError(error, "Unable to submit the payout request.");
@@ -2076,10 +2260,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           id,
           partnerId,
           commissionIds,
-          amount,
+          amount: payload.amount,
           status: "Pending",
           requestedDate: nowIso(),
-          message,
+          message: payload.message,
+          preferredBank: payload.preferredBank,
+          preferredMethod: payload.preferredMethod,
+          taxLiability: payload.taxLiability,
         },
         ...p,
       ]);
@@ -2090,11 +2277,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         user: actor,
         action: "Payout Requested",
         module: "Payouts",
-        details: `${id} · ${amount}`,
+        details: `${id}: ${payload.amount}`,
       });
       notify({
         title: "Payout request submitted",
-        body: `${id} · $${amount.toLocaleString()}`,
+        body: `Payout request for $${payload.amount.toLocaleString()}`,
         type: "info",
       });
       return true;
@@ -2104,6 +2291,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const approvePayout: AppActions["approvePayout"] = useCallback(
     async (id, actor) => {
+      if (user?.role !== "super_admin") {
+        toast.error("Only Super Admin can approve payout requests.");
+        return false;
+      }
       if (realMode && supabase) {
         const { error } = await (supabase as any).rpc("review_payout_request", {
           target_payout: id,
@@ -2136,11 +2327,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       return true;
     },
-    [handleWriteError, realMode, reloadAfterWrite],
+    [handleWriteError, realMode, reloadAfterWrite, user?.role],
   );
 
   const rejectPayout: AppActions["rejectPayout"] = useCallback(
     async (id, reason, actor) => {
+      if (user?.role !== "super_admin") {
+        toast.error("Only Super Admin can reject payout requests.");
+        return false;
+      }
       if (!reason.trim()) {
         toast.error("A rejection reason is required.");
         return false;
@@ -2187,6 +2382,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const recordPayoutPayment: AppActions["recordPayoutPayment"] = useCallback(
     async (id, payload, actor) => {
+      if (user?.role !== "super_admin") {
+        toast.error("Only Super Admin can record payout payments.");
+        return false;
+      }
       if (
         !payload.date ||
         !payload.method.trim() ||
@@ -2287,7 +2486,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       );
       return true;
     },
-    [handleWriteError, payouts, realMode, reloadAfterWrite],
+    [handleWriteError, payouts, realMode, reloadAfterWrite, user?.role],
   );
 
   const recordClientPayment: AppActions["recordClientPayment"] = useCallback(
@@ -2369,75 +2568,234 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const publishAnnouncement: AppActions["publishAnnouncement"] = useCallback(
-    (a, actor) => {
-      const item: Announcement = { ...a, id: uid("AN"), date: nowIso(), readBy: [] };
-      setAnnouncements((prev) => [item, ...prev]);
-      pushAudit({
-        user: actor,
-        action: "Announcement Published",
-        module: "Announcements",
-        details: a.title,
-      });
-      notify({ title: "New announcement", body: a.title, type: "info" });
+    async (a, actor) => {
+      if (user?.role !== "admin" && user?.role !== "super_admin") {
+        toast.error("Only Admin or Super Admin can publish announcements.");
+        return false;
+      }
+      if (a.attachmentFile) {
+        const validationError = validateAnnouncementFile(
+          a.attachmentFile,
+          settings.announcementAttachmentMaxBytes,
+        );
+        if (validationError) {
+          toast.error(validationError);
+          return false;
+        }
+      }
+
+      const id = realMode ? crypto.randomUUID() : uid("AN");
+      const target = announcementTarget(a.target, partners);
+      let attachmentPath: string | undefined;
       if (realMode && supabase) {
-        const target = announcementTarget(a.target, partners);
+        if (a.attachmentFile) {
+          attachmentPath = buildStoragePath(user.id, id, a.attachmentFile);
+          const { error: uploadError } = await supabase.storage
+            .from(STORAGE_BUCKETS.announcementAttachments)
+            .upload(attachmentPath, a.attachmentFile, {
+              contentType: a.attachmentFile.type,
+              upsert: false,
+            });
+          if (uploadError) {
+            handleWriteError(uploadError, "Announcement attachment upload failed.");
+            return false;
+          }
+        }
+
+        const { error: announcementError } = await (supabase as any).from("announcements").insert({
+          id,
+          title: a.title,
+          body: a.body,
+          priority: a.priority,
+          target_type: target.target_type,
+          target_rules: target.target_rules,
+          send_email: Boolean((a as any).sendEmail),
+          published_by: user.id,
+          attachment_name: a.attachmentFile?.name || null,
+          attachment_bucket: attachmentPath ? STORAGE_BUCKETS.announcementAttachments : null,
+          attachment_path: attachmentPath || null,
+          attachment_type: a.attachmentFile?.type || null,
+          attachment_size: a.attachmentFile?.size || null,
+        });
+        if (announcementError) {
+          if (attachmentPath) {
+            await supabase.storage
+              .from(STORAGE_BUCKETS.announcementAttachments)
+              .remove([attachmentPath]);
+          }
+          handleWriteError(announcementError, "Unable to publish the announcement.");
+          return false;
+        }
+      }
+
+      const item: Announcement = {
+        id,
+        title: a.title,
+        body: a.body,
+        priority: a.priority,
+        target: a.target,
+        date: nowIso(),
+        readBy: [],
+        attachmentName: a.attachmentFile?.name,
+        attachmentBucket: attachmentPath ? STORAGE_BUCKETS.announcementAttachments : undefined,
+        attachmentPath,
+        attachmentType: a.attachmentFile?.type,
+        attachmentSize: a.attachmentFile?.size,
+        comments: [],
+        reactions: [],
+      };
+      setAnnouncements((prev) => [item, ...prev]);
+
+      if (realMode && supabase) {
         const targetedPartners = partners.filter((partner) =>
           isAnnouncementTargeted(item, partner),
         );
-        void (async () => {
-          const { error: announcementError } = await supabase.from("announcements").insert({
-            title: a.title,
-            body: a.body,
-            priority: a.priority,
-            target_type: target.target_type,
-            target_rules: target.target_rules,
-            send_email: Boolean((a as any).sendEmail),
-            published_by: user?.id || null,
-          });
-          if (announcementError) {
-            handleWriteError(announcementError);
-            reloadAfterWrite();
-            return;
-          }
-
-          if (targetedPartners.length > 0) {
-            const { error: notificationError } = await supabase.from("notifications").insert(
-              targetedPartners.map((partner) => ({
-                partner_id: partner.id,
+        if (targetedPartners.length > 0) {
+          const { error } = await supabase.from("notifications").insert(
+            targetedPartners.map((partner) => ({
+              partner_id: partner.id,
+              title: "New announcement",
+              body: `${a.priority}: ${a.title}`,
+              type: a.priority === "Important" ? "warning" : "info",
+              mandatory: a.priority === "Important",
+            })),
+          );
+          if (error) handleWriteError(error, "Announcement published, but notifications failed.");
+        }
+        if (target.target_type === "staff_roles" || target.target_type === "all_users") {
+          const roles = (target.target_rules as { roles?: string[] }).roles || [
+            "admin",
+            "super_admin",
+          ];
+          const recipients = staffUsers.filter(
+            (staff) =>
+              staff.id !== user.id &&
+              staff.accountStatus !== "deactivated" &&
+              roles.includes(staff.role),
+          );
+          if (recipients.length > 0) {
+            const { error } = await supabase.from("notifications").insert(
+              recipients.map((staff) => ({
+                recipient_id: staff.id,
                 title: "New announcement",
                 body: `${a.priority}: ${a.title}`,
-                type: a.priority === "Urgent" ? "warning" : "info",
-                mandatory: a.priority === "Urgent",
+                type: a.priority === "Important" ? "warning" : "info",
+                mandatory: a.priority === "Important",
               })),
             );
-            if (notificationError) handleWriteError(notificationError);
+            if (error) handleWriteError(error, "Announcement published, but notifications failed.");
           }
-          if (target.target_type === "staff_roles" || target.target_type === "all_users") {
-            const roles = (target.target_rules as { roles?: string[] }).roles || [
-              "admin",
-              "super_admin",
-            ];
-            const recipients = staffUsers.filter(
-              (staff) => staff.accountStatus !== "deactivated" && roles.includes(staff.role),
-            );
-            if (recipients.length > 0) {
-              const { error: staffNotificationError } = await supabase.from("notifications").insert(
-                recipients.map((staff) => ({
-                  recipient_id: staff.id,
-                  title: "New announcement",
-                  body: `${a.priority}: ${a.title}`,
-                  type: a.priority === "Urgent" ? "warning" : "info",
-                  mandatory: a.priority === "Urgent",
-                })),
-              );
-              if (staffNotificationError) handleWriteError(staffNotificationError);
-            }
-          }
-          reloadAfterWrite();
-        })();
+        }
+        reloadAfterWrite();
+      } else {
+        pushAudit({
+          user: actor,
+          action: "Announcement Published",
+          module: "Announcements",
+          details: a.title,
+        });
       }
+      return true;
     },
-    [handleWriteError, partners, realMode, reloadAfterWrite, staffUsers, user?.id],
+    [
+      handleWriteError,
+      partners,
+      realMode,
+      reloadAfterWrite,
+      settings.announcementAttachmentMaxBytes,
+      staffUsers,
+      user,
+    ],
+  );
+
+  const addAnnouncementComment: AppActions["addAnnouncementComment"] = useCallback(
+    async (announcementId, body) => {
+      if (!user || !body.trim()) return false;
+      const id = crypto.randomUUID();
+      if (realMode && supabase) {
+        const { error } = await (supabase as any).from("announcement_comments").insert({
+          id,
+          announcement_id: announcementId,
+          actor_id: user.id,
+          actor_name: user.name,
+          body: body.trim(),
+        });
+        if (error) {
+          handleWriteError(error, "Unable to post the announcement reply.");
+          return false;
+        }
+      }
+      setAnnouncements((current) =>
+        current.map((announcement) =>
+          announcement.id === announcementId
+            ? {
+                ...announcement,
+                comments: [
+                  ...announcement.comments,
+                  {
+                    id,
+                    announcementId,
+                    actorId: user.id,
+                    actorName: user.name,
+                    body: body.trim(),
+                    date: nowIso(),
+                  },
+                ],
+              }
+            : announcement,
+        ),
+      );
+      reloadAfterWrite();
+      return true;
+    },
+    [handleWriteError, realMode, reloadAfterWrite, user],
+  );
+
+  const setAnnouncementReaction: AppActions["setAnnouncementReaction"] = useCallback(
+    async (announcementId, reaction) => {
+      if (!user) return false;
+      const announcement = announcements.find((item) => item.id === announcementId);
+      const existing = announcement?.reactions.find((item) => item.actorId === user.id);
+      if (realMode && supabase) {
+        const query = (supabase as any).from("announcement_reactions");
+        const { error } = reaction
+          ? await query.upsert(
+              {
+                announcement_id: announcementId,
+                actor_id: user.id,
+                reaction,
+              },
+              { onConflict: "announcement_id,actor_id" },
+            )
+          : await query.delete().eq("announcement_id", announcementId).eq("actor_id", user.id);
+        if (error) {
+          handleWriteError(error, "Unable to update your reaction.");
+          return false;
+        }
+      }
+      setAnnouncements((current) =>
+        current.map((item) => {
+          if (item.id !== announcementId) return item;
+          const others = item.reactions.filter((entry) => entry.actorId !== user.id);
+          return {
+            ...item,
+            reactions: reaction
+              ? [
+                  ...others,
+                  {
+                    id: existing?.id || crypto.randomUUID(),
+                    announcementId,
+                    actorId: user.id,
+                    reaction,
+                  },
+                ]
+              : others,
+          };
+        }),
+      );
+      return true;
+    },
+    [announcements, handleWriteError, realMode, user],
   );
 
   const markAnnouncementRead: AppActions["markAnnouncementRead"] = useCallback(
@@ -2920,6 +3278,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ["pipeline_stage_labels", patch.pipelineLabels],
           ["partner_tier_labels", patch.tierLabels],
           ["invitation_expiry_hours", patch.invitationExpiry],
+          ["onboarding_checklist_steps", patch.onboardingSteps],
+          ["announcement_attachment_max_bytes", patch.announcementAttachmentMaxBytes],
+          ["welcome_intro_video_url", patch.welcomeIntroVideoUrl],
         ].reduce<{ key: string; value: Json; updated_by: string | null }[]>((acc, [key, value]) => {
           if (value !== undefined)
             acc.push({ key: String(key), value: value as Json, updated_by: user?.id || null });
@@ -2960,6 +3321,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addLead,
     updateLeadStage,
     updateLeadStatus,
+    updateOwnLead,
     addComment,
     addAttachment,
     closeLeadWon,
@@ -2976,6 +3338,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     recordPayoutPayment,
     recordClientPayment,
     publishAnnouncement,
+    addAnnouncementComment,
+    setAnnouncementReaction,
     markAnnouncementRead,
     markNotificationRead,
     markAllNotificationsRead,

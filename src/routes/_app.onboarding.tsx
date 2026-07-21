@@ -8,6 +8,8 @@ import {
   FileText,
   Handshake,
   LifeBuoy,
+  ExternalLink,
+  PlayCircle,
   Rocket,
   ShieldCheck,
 } from "lucide-react";
@@ -33,7 +35,7 @@ type AgreementDocument = {
 
 function Onboarding() {
   const { user, signRequiredAgreements } = useAuth();
-  const { onboarding } = useStore();
+  const { onboarding, settings } = useStore();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<AgreementDocument[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(true);
@@ -274,46 +276,70 @@ function Onboarding() {
                     </div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="flex gap-3 rounded-md border p-3">
-                      <Handshake className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
+                    <a
+                      href={settings.welcomeIntroVideoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex gap-3 rounded-md border p-3 transition-colors hover:bg-accent/30"
+                    >
+                      <PlayCircle className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
                       <div>
-                        <div className="text-sm font-medium">Partner approach</div>
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          Introduction video <ExternalLink className="h-3.5 w-3.5" />
+                        </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Introduce qualified opportunities transparently and keep relationship
-                          context current.
+                          Welcome from the VP of Global Client Relations.
                         </p>
                       </div>
-                    </div>
-                    <div className="flex gap-3 rounded-md border p-3">
+                    </a>
+                    <a
+                      href="https://www.youtube.com/@GoAccelovate/playlists"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex gap-3 rounded-md border p-3 transition-colors hover:bg-accent/30"
+                    >
                       <Rocket className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
                       <div>
-                        <div className="text-sm font-medium">Getting started</div>
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          Explore our Use Cases <ExternalLink className="h-3.5 w-3.5" />
+                        </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Complete your profile, submit your first qualified lead, and follow its
-                          progress from My Leads.
+                          Browse GoAccelovate's solution and industry playlists.
                         </p>
                       </div>
-                    </div>
-                    <div className="flex gap-3 rounded-md border p-3">
+                    </a>
+                    <a
+                      href="https://www.goaccelovate.com/case-studies"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex gap-3 rounded-md border p-3 transition-colors hover:bg-accent/30"
+                    >
                       <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
                       <div>
-                        <div className="text-sm font-medium">Data care</div>
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          Explore our Case Studies <ExternalLink className="h-3.5 w-3.5" />
+                        </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Share only authorized business information and protect confidential client
-                          material.
+                          See how GoAccelovate delivers measurable client outcomes.
                         </p>
                       </div>
-                    </div>
-                    <div className="flex gap-3 rounded-md border p-3">
-                      <LifeBuoy className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
+                    </a>
+                    <a
+                      href="https://canva.link/c3278nhyl1ahyj5"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex gap-3 rounded-md border p-3 transition-colors hover:bg-accent/30"
+                    >
+                      <Handshake className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
                       <div>
-                        <div className="text-sm font-medium">Program support</div>
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          View Company Profile <ExternalLink className="h-3.5 w-3.5" />
+                        </div>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Contact your assigned GoAccelovate account manager whenever an opportunity
-                          needs operational support.
+                          Open the current GoAccelovate company profile.
                         </p>
                       </div>
-                    </div>
+                    </a>
                   </div>
                 </div>
                 <div className="shrink-0 lg:pt-14">

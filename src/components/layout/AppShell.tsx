@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   Users,
   Briefcase,
-  ListChecks,
   KanbanSquare,
   DollarSign,
   Wallet,
@@ -45,7 +44,6 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/users", label: "User Management", icon: Users },
   { to: "/partners", label: "Partners", icon: Briefcase },
-  { to: "/leads", label: "All Leads", icon: ListChecks },
   { to: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { to: "/commissions", label: "Commissions", icon: DollarSign },
   { to: "/payouts", label: "Payout Requests", icon: Wallet },
@@ -60,7 +58,6 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/users", label: "Sales Partners", icon: Users },
   { to: "/partners", label: "Partner Profiles", icon: Briefcase },
-  { to: "/leads", label: "All Leads", icon: ListChecks },
   { to: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { to: "/commissions", label: "Commissions", icon: DollarSign },
   { to: "/payouts", label: "Payout Requests", icon: Wallet },
@@ -73,7 +70,6 @@ const PARTNER_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/profile", label: "My Profile", icon: UserCircle },
   { to: "/onboarding", label: "Onboarding", icon: ClipboardCheck },
-  { to: "/leads", label: "My Leads", icon: ListChecks },
   { to: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { to: "/commissions", label: "My Commissions", icon: DollarSign },
   { to: "/announcements", label: "Announcements", icon: Megaphone },
@@ -102,7 +98,7 @@ function notificationDestination(notification: Notification, user: User) {
   if (/client payment|advance payment|final payment/.test(text))
     return user.role === "partner" ? "/commissions" : "/client-payments";
   if (/commission|dispute/.test(text)) return "/commissions";
-  if (/lead|pipeline|duplicate|discovery call|stage/.test(text)) return "/leads";
+  if (/lead|pipeline|duplicate|discovery call|stage/.test(text)) return "/pipeline";
   if (/invitation|account|user|profile/.test(text))
     return user.role === "partner" ? "/profile" : "/users";
   if (/setting/.test(text) && user.role === "super_admin") return "/settings";
@@ -273,7 +269,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               onSubmit={(e) => {
                 e.preventDefault();
                 const v = (new FormData(e.currentTarget).get("q") as string)?.trim();
-                if (v) navigate({ to: "/leads", search: { q: v } as never });
+                if (v) navigate({ to: "/pipeline", search: { view: "list" } });
               }}
             >
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

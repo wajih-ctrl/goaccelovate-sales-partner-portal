@@ -13,7 +13,7 @@ import { PipelineListPanel } from "@/components/pipeline/PipelineListPanel";
 
 export const Route = createFileRoute("/_app/pipeline")({
   validateSearch: (search: Record<string, unknown>) => ({
-    view: search.view === "list" ? ("list" as const) : ("kanban" as const),
+    view: search.view === "kanban" ? ("kanban" as const) : ("list" as const),
   }),
   component: Pipeline,
 });
@@ -71,7 +71,15 @@ function Pipeline() {
     if (!dragging || dragging.id === move.beforeId) return;
     const lead = leads.find((l) => l.id === move.leadId);
     if (!lead) return;
-    if (!canMoveLeadStage(user!.role, lead.stage, move.targetStage, lead.previousStage)) {
+    if (
+      !canMoveLeadStage(
+        user!.role,
+        lead.stage,
+        move.targetStage,
+        lead.previousStage,
+        lead.stageAdminLocked,
+      )
+    ) {
       toast.error("Your role cannot move this lead to that stage.");
       return;
     }
@@ -94,7 +102,15 @@ function Pipeline() {
   const stageSelect = (leadId: string, targetStage: LeadStage) => {
     const lead = leads.find((l) => l.id === leadId);
     if (!lead || lead.stage === targetStage) return;
-    if (!canMoveLeadStage(user!.role, lead.stage, targetStage, lead.previousStage)) {
+    if (
+      !canMoveLeadStage(
+        user!.role,
+        lead.stage,
+        targetStage,
+        lead.previousStage,
+        lead.stageAdminLocked,
+      )
+    ) {
       toast.error("Your role cannot move this lead to that stage.");
       return;
     }
@@ -178,6 +194,7 @@ function Pipeline() {
                         user!.role,
                         l.stage,
                         l.previousStage,
+                        l.stageAdminLocked,
                       );
                       const canDrag = allowedTargets.some((target) => target !== l.stage);
                       return (

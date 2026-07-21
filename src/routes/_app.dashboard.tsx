@@ -134,7 +134,7 @@ function AdminDash() {
         description="Real-time view of the Global Partner Program."
         actions={
           <>
-            <Link to="/pipeline" search={{ view: "kanban" }}>
+            <Link to="/pipeline" search={{ view: "list" }}>
               <Button variant="outline">
                 <KanbanSquare className="mr-2 h-4 w-4" />
                 Pipeline
@@ -194,7 +194,11 @@ function AdminDash() {
                 <h3 className="font-semibold">Leads by status</h3>
                 <p className="text-xs text-muted-foreground">Across all partners</p>
               </div>
-              <Link to="/leads" className="text-xs text-brand hover:underline">
+              <Link
+                to="/pipeline"
+                search={{ view: "list" }}
+                className="text-xs text-brand hover:underline"
+              >
                 View all →
               </Link>
             </div>
@@ -229,7 +233,7 @@ function AdminDash() {
                       <div>
                         <div className="font-medium">{partner?.name || "Unknown"}</div>
                         <div className="text-xs text-muted-foreground">
-                          {p.id} · {new Date(p.requestedDate).toLocaleDateString()}
+                          Requested {new Date(p.requestedDate).toLocaleDateString()}
                         </div>
                       </div>
                       <div className="font-semibold">{fmtCurrency(p.amount)}</div>
@@ -248,7 +252,11 @@ function AdminDash() {
                 <AlertTriangle className="h-4 w-4 text-warning-foreground" />
                 Stale leads ({settings.staleThreshold}+ days)
               </h3>
-              <Link to="/leads" className="text-xs text-brand hover:underline">
+              <Link
+                to="/pipeline"
+                search={{ view: "list" }}
+                className="text-xs text-brand hover:underline"
+              >
                 View →
               </Link>
             </div>

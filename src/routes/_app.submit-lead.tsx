@@ -160,8 +160,7 @@ function SubmitLead() {
                 <CheckCircle2 className="mx-auto h-12 w-12 text-success" />
                 <h2 className="mt-3 text-xl font-semibold">Lead accepted into pipeline</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Lead <strong>{submitted.id}</strong> is now visible in your pipeline as{" "}
-                  <em>Identified Opportunity</em>.
+                  Your lead is now visible in the pipeline as <em>Identified Opportunity</em>.
                 </p>
               </>
             )}

@@ -59,6 +59,11 @@ function Settings() {
     industries: splitList(form.industries),
     pipelineLabels: splitList(form.pipelineLabels),
     onboardingSteps: splitList(form.onboardingSteps),
+    announcementAttachmentMaxBytes: Math.max(
+      1024 * 1024,
+      Number(form.announcementAttachmentMaxBytes) || 2 * 1024 * 1024,
+    ),
+    welcomeIntroVideoUrl: form.welcomeIntroVideoUrl.trim(),
   });
 
   const save = () => {
@@ -125,6 +130,32 @@ function Settings() {
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={form.currencies}
               onChange={(e) => upd("currencies", e.target.value)}
+            />
+          </Row>
+        </Card>
+
+        <Card className="p-5">
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Announcements & Welcome Kit
+          </h3>
+          <Row label="Announcement attachment limit (MB)">
+            <input
+              type="number"
+              min="1"
+              max="50"
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={form.announcementAttachmentMaxBytes / 1024 / 1024}
+              onChange={(event) =>
+                upd("announcementAttachmentMaxBytes", Number(event.target.value) * 1024 * 1024)
+              }
+            />
+          </Row>
+          <Row label="Welcome introduction video URL">
+            <input
+              type="url"
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={form.welcomeIntroVideoUrl}
+              onChange={(event) => upd("welcomeIntroVideoUrl", event.target.value)}
             />
           </Row>
         </Card>

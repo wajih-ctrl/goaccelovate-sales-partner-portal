@@ -2,6 +2,7 @@ export const STORAGE_BUCKETS = {
   leadAttachments: "lead-attachments",
   partnerDocuments: "partner-documents",
   discoveryCallFiles: "discovery-call-files",
+  announcementAttachments: "announcement-attachments",
 } as const;
 
 type BucketId = (typeof STORAGE_BUCKETS)[keyof typeof STORAGE_BUCKETS];
@@ -10,6 +11,7 @@ const MAX_FILE_SIZE: Record<BucketId, number> = {
   "lead-attachments": 50 * 1024 * 1024,
   "partner-documents": 50 * 1024 * 1024,
   "discovery-call-files": 100 * 1024 * 1024,
+  "announcement-attachments": 2 * 1024 * 1024,
 };
 
 const ALLOWED_TYPES: Record<BucketId, Set<string>> = {
@@ -34,6 +36,13 @@ const ALLOWED_TYPES: Record<BucketId, Set<string>> = {
     "video/mp4",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ]),
+  "announcement-attachments": new Set([
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ]),
 };
 
 export function sanitizeFileName(name: string) {
@@ -49,6 +58,16 @@ export function validateUploadFile(file: File, bucket: BucketId) {
     return "Unsupported file type for this upload.";
   }
 
+  return null;
+}
+
+export function validateAnnouncementFile(file: File, maxBytes: number) {
+  const typeError = validateUploadFile(file, STORAGE_BUCKETS.announcementAttachments);
+  if (typeError && !typeError.startsWith("File is too large")) return typeError;
+  if (file.size > maxBytes) {
+    const megabytes = Math.max(1, Math.round((maxBytes / 1024 / 1024) * 10) / 10);
+    return `File is too large. The current announcement limit is ${megabytes}MB.`;
+  }
   return null;
 }
 

@@ -23,13 +23,25 @@ export const REGION_COUNTRIES: Record<string, string[]> = {
 
 export function isAnnouncementTargeted(a: Announcement, partner?: Partner) {
   if (!partner) return false;
-  if (["All partners", "all_partners", "All portal users", "all_users"].includes(a.target))
+  if (
+    [
+      "All Sales Partners",
+      "All partners",
+      "all_partners",
+      "All Portal Partners",
+      "All portal users",
+      "all_users",
+    ].includes(a.target)
+  )
     return true;
   // Canonical database targets are already filtered for partners by Supabase RLS.
   if (["region", "selected_partners"].includes(a.target)) return true;
   if (REGION_COUNTRIES[a.target]?.includes(partner.country)) return true;
-  if (a.target.startsWith("Selected partners:")) {
-    const selected = a.target.replace("Selected partners:", "").toLowerCase();
+  if (
+    a.target.startsWith("Selected partners:") ||
+    a.target.startsWith("Selected Sales Partners:")
+  ) {
+    const selected = a.target.replace(/^Selected (?:Sales Partners|partners):/, "").toLowerCase();
     return (
       selected.includes(partner.id.toLowerCase()) || selected.includes(partner.name.toLowerCase())
     );

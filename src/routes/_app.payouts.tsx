@@ -23,6 +23,7 @@ function Payouts() {
     recordPayoutPayment,
   } = useStore();
   const isPartner = user?.role === "partner";
+  const canReview = user?.role === "super_admin";
   const list = isPartner ? payouts.filter((p) => p.partnerId === user.partnerId) : payouts;
 
   const [rejectId, setRejectId] = useState<string | null>(null);
@@ -45,7 +46,9 @@ function Payouts() {
         description={
           isPartner
             ? "Track every payout request and its status."
-            : "Review and approve partner payout requests."
+            : canReview
+              ? "Review and process partner payout requests."
+              : "View partner payout requests. Super Admin approval is required."
         }
       />
       <PageContainer>
@@ -54,7 +57,6 @@ function Payouts() {
             <table className="min-w-[1040px] w-full whitespace-nowrap text-sm">
               <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left">Request ID</th>
                   {!isPartner && <th className="px-4 py-3 text-left">Partner</th>}
                   <th className="px-4 py-3 text-left">Deals</th>
                   <th className="px-4 py-3 text-left">Requested</th>
@@ -69,7 +71,6 @@ function Payouts() {
                   const partner = partners.find((pp) => pp.id === p.partnerId);
                   return (
                     <tr key={p.id} className="border-t hover:bg-accent/20">
-                      <td className="px-4 py-3 font-medium">{p.id}</td>
                       {!isPartner && <td className="px-4 py-3">{partner?.name}</td>}
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {p.commissionIds.length} commission(s)
@@ -90,7 +91,7 @@ function Payouts() {
                         <Button size="sm" variant="ghost" onClick={() => setViewId(p.id)}>
                           View
                         </Button>
-                        {!isPartner && p.status === "Pending" && (
+                        {canReview && p.status === "Pending" && (
                           <>
                             <Button
                               size="sm"
@@ -112,7 +113,7 @@ function Payouts() {
                             </Button>
                           </>
                         )}
-                        {!isPartner && p.status === "Approved" && (
+                        {canReview && p.status === "Approved" && (
                           <Button
                             size="sm"
                             onClick={() => {
@@ -130,7 +131,7 @@ function Payouts() {
                 {list.length === 0 && (
                   <tr>
                     <td
-                      colSpan={isPartner ? 7 : 8}
+                      colSpan={isPartner ? 6 : 7}
                       className="py-10 text-center text-muted-foreground"
                     >
                       No payout requests yet.
@@ -150,7 +151,7 @@ function Payouts() {
       <ReasonDialog
         open={!!rejectId}
         onOpenChange={(b) => !b && setRejectId(null)}
-        title={`Reject payout ${rejectId || ""}`}
+        title="Reject payout request"
         description="Provide a reason. The partner will see this explanation."
         confirmLabel="Reject payout"
         onConfirm={async (reason) => {
@@ -233,7 +234,7 @@ function Payouts() {
       <FormDialog
         open={!!viewing}
         onOpenChange={(b) => !b && setViewId(null)}
-        title={`Payout ${viewing?.id || ""}`}
+        title="Payout request details"
         submitLabel="Close"
         onSubmit={() => setViewId(null)}
       >
@@ -254,6 +255,24 @@ function Payouts() {
             <div className="flex justify-between">
               <span className="text-muted-foreground">Requested</span>
               <span>{new Date(viewing.requestedDate).toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">Preferred bank</span>
+              <span className="text-right">{viewing.preferredBank || "Not provided"}</span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">Preferred payment method</span>
+              <span className="text-right">{viewing.preferredMethod || "Not provided"}</span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">Partner liable for local taxes</span>
+              <span>
+                {viewing.taxLiability == null
+                  ? "Not provided"
+                  : viewing.taxLiability
+                    ? "Yes"
+                    : "No"}
+              </span>
             </div>
             {viewing.paidDate && (
               <div className="flex justify-between">
@@ -298,7 +317,7 @@ function Payouts() {
                       key={cid}
                       className="flex justify-between rounded border bg-accent/10 px-2 py-1 text-xs"
                     >
-                      <span>{l?.company || cid}</span>
+                      <span>{l?.company || "Commission"}</span>
                       <span>{c ? fmtCurrency(c.amount) : ""}</span>
                     </li>
                   );

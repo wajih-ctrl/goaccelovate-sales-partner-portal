@@ -9,6 +9,7 @@ type InvitePayload = {
   email?: string;
   role?: "admin" | "partner";
   commissionRate?: number;
+  agreementText?: string;
 };
 
 type RevokePayload = {
@@ -136,6 +137,7 @@ function validate(payload: InvitePayload) {
   const email = normalizeEmail(payload.email || "");
   const role = payload.role;
   const commissionRate = Number(payload.commissionRate);
+  const agreementText = payload.agreementText?.trim() || "";
 
   if (!name) return { error: "Full name is required." };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Valid email is required." };
@@ -146,8 +148,16 @@ function validate(payload: InvitePayload) {
     (!Number.isFinite(commissionRate) || commissionRate <= 0 || commissionRate > 100)
   )
     return { error: "Commission percentage must be greater than 0 and no more than 100." };
+  if (role === "partner" && agreementText.length < 100)
+    return { error: "Agreement text is required and must contain the full partner agreement." };
 
-  return { name, email, role, commissionRate: role === "partner" ? commissionRate : null };
+  return {
+    name,
+    email,
+    role,
+    commissionRate: role === "partner" ? commissionRate : null,
+    agreementText: role === "partner" ? agreementText : null,
+  };
 }
 
 export const Route = createFileRoute("/api/invitations")({
@@ -266,6 +276,7 @@ export const Route = createFileRoute("/api/invitations")({
             agreement_signer_name: actor.full_name || authUser.email || "GoAccelovate Admin",
             agreement_signer_role: actor.role,
             agreement_signed_at: agreementSignedAt,
+            agreement_text: parsed.agreementText,
             token_hash: crypto.randomUUID(),
             expires_at: expiresAt,
           })
