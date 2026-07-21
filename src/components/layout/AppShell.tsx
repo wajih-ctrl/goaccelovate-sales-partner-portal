@@ -26,6 +26,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ArrowLeft,
+  PlusCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand/BrandLogo";
@@ -71,6 +72,7 @@ const PARTNER_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/profile", label: "My Profile", icon: UserCircle },
   { to: "/onboarding", label: "Onboarding", icon: ClipboardCheck },
+  { to: "/submit-lead", label: "Submit Lead", icon: PlusCircle },
   { to: "/pipeline", label: "Pipeline", icon: KanbanSquare },
   { to: "/commissions", label: "My Commissions", icon: DollarSign },
   { to: "/announcements", label: "Announcements", icon: Megaphone },
