@@ -39,9 +39,8 @@ function Reports() {
   ];
 
   const pipelineRows = [
-    ["ID", "Company", "Partner", "Stage", "Status", "Value", "Last Activity"],
+    ["Company", "Partner", "Stage", "Status", "Value", "Last Activity"],
     ...leads.map((lead) => [
-      lead.id,
       lead.company,
       partners.find((partner) => partner.id === lead.partnerId)?.name || "",
       lead.stage,
@@ -75,9 +74,8 @@ function Reports() {
   ];
 
   const payoutRows = [
-    ["ID", "Partner", "Amount", "Status", "Requested", "Paid", "Method", "Reference"],
+    ["Partner", "Amount", "Status", "Requested", "Paid", "Method", "Reference"],
     ...payouts.map((payout) => [
-      payout.id,
       partners.find((partner) => partner.id === payout.partnerId)?.name || "",
       payout.amount,
       payout.status,
@@ -106,7 +104,6 @@ function Reports() {
 
   const myLeadRows = [
     [
-      "ID",
       "Company",
       "Stage",
       "Status",
@@ -123,7 +120,6 @@ function Reports() {
           (item) => item.leadId === lead.id && item.partnerId === partnerId,
         );
         return [
-          lead.id,
           lead.company,
           lead.stage,
           lead.status,
@@ -141,7 +137,7 @@ function Reports() {
     ...commissions
       .filter((commission) => commission.partnerId === partnerId)
       .map((commission) => [
-        leads.find((lead) => lead.id === commission.leadId)?.company || commission.leadId,
+        leads.find((lead) => lead.id === commission.leadId)?.company || "Archived lead",
         `${commission.rate}%`,
         commission.amount,
         commission.state,

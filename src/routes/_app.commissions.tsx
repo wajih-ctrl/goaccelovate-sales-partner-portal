@@ -167,7 +167,7 @@ function Commissions() {
                           params={{ id: c.leadId }}
                           className="font-medium hover:underline"
                         >
-                          {c.label || lead?.company || c.leadId}
+                          {c.label || lead?.company || "Archived lead"}
                         </Link>
                         {c.notes && (
                           <div className="text-[11px] text-muted-foreground">{c.notes}</div>

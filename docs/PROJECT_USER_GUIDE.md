@@ -12,7 +12,7 @@ Authentication uses real Supabase Auth accounts. No demo login is included in pr
 
 ## Invitations And Agreements
 
-Admin and Super Admin can invite a Sales Partner. A commission percentage is required before sending the invitation. Only Super Admin can invite an Admin, revoke/delete an invitation, change roles, suspend, reinstate, or deactivate an account.
+Admin and Super Admin can invite a Sales Partner. A commission percentage is required before sending the invitation, and the invitation form lets the sender review and edit that partner's Agreement text before it is sent. Only Super Admin can invite an Admin, revoke/delete an invitation, change roles, suspend, reinstate, or deactivate an account.
 
 Sending a Sales Partner invitation countersigns the Agreement and NDA with the inviting Admin or Super Admin's name, role, and invitation date. This immutable signer snapshot remains part of the partner's generated documents even if the inviter's profile is later renamed.
 
@@ -39,7 +39,7 @@ Validation and duplicate detection run server-side:
 - A matching contact email or normalized phone number is rejected before a lead record is created. Company name alone is not treated as a duplicate.
 - A valid lead enters `Identified Opportunity` immediately and Admin users are notified.
 
-Partners can view their leads as a table or Kanban board, edit estimated value before the commercial stages, move only partner-controlled stages, add public updates, and delete their own lead while no commission exists.
+Partners can view their leads as a table or Kanban board, edit their own lead details before the commercial stages, move only partner-controlled stages, and add public updates. Partners cannot delete leads. In lead comments, a partner can mention active Admin and Super Admin users; another partner is never offered as a mention candidate.
 
 ## Pipeline
 
@@ -75,7 +75,9 @@ Client payment details are Admin-only. Admin records either:
 
 Recording an eligible payment releases the proportional commission amount. An advance payment releases only its share; the final payment releases the remaining share up to the calculated commission total. Partners see earned, payable/pending, and paid commission amounts, but never the client's payment records.
 
-The partner selects payable commission items in `My Commissions` and requests one payout. Admin approves or rejects it with a reason. After external payment, Admin records the exact approved amount, date, method, and transaction reference. The commission paid balance, payout history, audit entry, and partner notification update atomically.
+The partner selects payable commission items in `My Commissions` and requests one payout. The request captures the requested amount, preferred bank, preferred transfer method, and whether the partner declares local tax liability. Only Super Admin approves or rejects it; Admin access is read-only. After approval, Super Admin records the exact external payment amount, date, method, and transaction reference. The commission paid balance, payout history, audit entry, and partner notification update atomically.
+
+The portal records the partner's tax declaration for review. It does not calculate, deduct, or withhold taxes automatically. Super Admin confirms any applicable tax treatment and transfer fees under the partner's local rules before making the external payment.
 
 The complete browser and numerical verification procedure is documented in
 `PAYMENT_AND_PAYOUT_TEST_GUIDE.md`.
@@ -84,7 +86,7 @@ Commission disputes and the separate payout navigation are not part of this prog
 
 ## Announcements And Reports
 
-Announcements can target all partners, all users, Admins, Super Admins, regions, or selected partners. RLS determines who can read each announcement.
+Announcements can target all portal users, all Admin users, all Sales Partners, or selected Sales Partners. RLS determines who can read each announcement. Admin and Super Admin can publish important business posts with a configurable attachment limit; recipients can reply, mention permitted users, and react.
 
 Admin and Super Admin reports include operational pipeline, partner, commission, payout, and client revenue data. Super Admin alone can access the audit log. Partner export actions are intentionally removed; partner data remains available in their own portal views.
 

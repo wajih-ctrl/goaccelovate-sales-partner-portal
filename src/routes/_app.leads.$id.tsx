@@ -52,6 +52,7 @@ function LeadDetail() {
   const [mentionPickerOpen, setMentionPickerOpen] = useState(false);
   const [mentionCandidates, setMentionCandidates] = useState<LeadMentionCandidate[]>([]);
   const [loadingMentions, setLoadingMentions] = useState(false);
+  const [mentionLoadFailed, setMentionLoadFailed] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [edit, setEdit] = useState({
@@ -109,15 +110,17 @@ function LeadDetail() {
   const commission = store.commissions.find((c) => c.leadId === id);
   const files = store.attachments[id] || [];
   const dup = lead.status === "Duplicate Rejected";
-  const loadMentionCandidates = async () => {
+  const loadMentionCandidates = async (force = false) => {
     setMentionPickerOpen(true);
-    if (mentionCandidates.length || loadingMentions) return;
+    if ((!force && mentionCandidates.length) || loadingMentions) return;
     setLoadingMentions(true);
+    setMentionLoadFailed(false);
     if (supabase) {
       const { data, error } = await (supabase as any).rpc("get_lead_mention_candidates", {
         target_lead: id,
       });
       if (error) {
+        setMentionLoadFailed(true);
         toast.error("Unable to load Admin mentions. Please try again.");
       } else {
         setMentionCandidates(
@@ -613,6 +616,18 @@ function LeadDetail() {
                                 )}
                               </button>
                             ))
+                          ) : mentionLoadFailed ? (
+                            <div className="space-y-2 px-3 py-4 text-center text-xs text-muted-foreground">
+                              <div>Admin names could not be loaded.</div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void loadMentionCandidates(true)}
+                              >
+                                Try again
+                              </Button>
+                            </div>
                           ) : (
                             <div className="px-3 py-4 text-center text-xs text-muted-foreground">
                               No active Admins are available.

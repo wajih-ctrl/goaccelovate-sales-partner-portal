@@ -208,6 +208,11 @@ export function PartnerPayoutRequestButton({
             </label>
           </div>
         </fieldset>
+        <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-950">
+          Your declaration is recorded for Super Admin review. The portal does not calculate or
+          withhold taxes automatically; applicable taxes and transfer fees are handled when the
+          payment is processed externally.
+        </div>
         <label className="text-xs">
           Message (optional)
           <textarea

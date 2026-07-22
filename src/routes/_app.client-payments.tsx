@@ -121,7 +121,7 @@ function ClientPayments() {
                   return (
                     <tr key={cp.id} className="border-t hover:bg-accent/20">
                       <td className="px-4 py-3 font-medium">{cp.reference}</td>
-                      <td className="px-4 py-3">{lead?.company || cp.leadId}</td>
+                      <td className="px-4 py-3">{lead?.company || "Archived lead"}</td>
                       <td className="px-4 py-3 text-xs">
                         {new Date(cp.date).toLocaleDateString()}
                       </td>

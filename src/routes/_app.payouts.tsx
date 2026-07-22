@@ -38,6 +38,7 @@ function Payouts() {
   });
 
   const viewing = viewId ? payouts.find((p) => p.id === viewId) : null;
+  const paying = payId ? payouts.find((p) => p.id === payId) : null;
 
   return (
     <>
@@ -54,12 +55,14 @@ function Payouts() {
       <PageContainer>
         <Card className="shadow-card overflow-hidden">
           <div className="responsive-table-scroll">
-            <table className="min-w-[1040px] w-full whitespace-nowrap text-sm">
+            <table className="min-w-[1260px] w-full whitespace-nowrap text-sm">
               <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   {!isPartner && <th className="px-4 py-3 text-left">Partner</th>}
                   <th className="px-4 py-3 text-left">Deals</th>
                   <th className="px-4 py-3 text-left">Requested</th>
+                  <th className="px-4 py-3 text-left">Payment method</th>
+                  <th className="px-4 py-3 text-left">Tax declaration</th>
                   <th className="px-4 py-3 text-right">Amount</th>
                   <th className="px-4 py-3 text-left">Status</th>
                   <th className="px-4 py-3 text-left">Paid</th>
@@ -77,6 +80,14 @@ function Payouts() {
                       </td>
                       <td className="px-4 py-3 text-xs">
                         {new Date(p.requestedDate).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-xs">{p.preferredMethod || "Not provided"}</td>
+                      <td className="px-4 py-3 text-xs">
+                        {p.taxLiability == null
+                          ? "Not provided"
+                          : p.taxLiability
+                            ? "Partner liable"
+                            : "Not liable"}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold">
                         {fmtCurrency(p.amount)}
@@ -131,7 +142,7 @@ function Payouts() {
                 {list.length === 0 && (
                   <tr>
                     <td
-                      colSpan={isPartner ? 6 : 7}
+                      colSpan={isPartner ? 8 : 9}
                       className="py-10 text-center text-muted-foreground"
                     >
                       No payout requests yet.
@@ -186,6 +197,27 @@ function Payouts() {
           });
         }}
       >
+        {paying && (
+          <div className="rounded-md border bg-accent/30 p-3 text-xs">
+            <div className="font-semibold">Partner payout instructions</div>
+            <div className="mt-1 text-muted-foreground">
+              {paying.preferredBank || "Bank not provided"} /{" "}
+              {paying.preferredMethod || "Method not provided"}
+            </div>
+            <div className="mt-1">
+              Tax declaration:{" "}
+              {paying.taxLiability == null
+                ? "Not provided"
+                : paying.taxLiability
+                  ? "Partner is liable for local taxes"
+                  : "Partner is not liable for local taxes"}
+            </div>
+            <div className="mt-2 text-muted-foreground">
+              The portal records this declaration but does not calculate or withhold tax. Confirm
+              any applicable deduction or transfer fee before sending the external payment.
+            </div>
+          </div>
+        )}
         <label className="text-xs">
           Amount paid
           <input
