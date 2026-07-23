@@ -53,6 +53,9 @@ function Onboarding() {
   const { user } = useAuth();
   const { onboarding, settings } = useStore();
   const [documents, setDocuments] = useState<AgreementDocument[]>([]);
+  const [signedDocumentTypes, setSignedDocumentTypes] = useState<
+    Set<AgreementDocument["document_type"]>
+  >(new Set());
   const [documentsLoading, setDocumentsLoading] = useState(true);
   const [welcomeAcknowledged, setWelcomeAcknowledged] = useState(false);
   const [welcomeLoading, setWelcomeLoading] = useState(false);
@@ -62,24 +65,49 @@ function Onboarding() {
       setDocumentsLoading(false);
       return;
     }
-    void (supabase as any)
-      .from("agreement_documents")
-      .select("id,document_type,title,version,content_url")
-      .eq("is_active", true)
-      .order("document_type")
-      .then(
-        ({
-          data,
-          error,
-        }: {
-          data: AgreementDocument[] | null;
+    void Promise.all([
+      (supabase as any)
+        .from("agreement_documents")
+        .select("id,document_type,title,version,content_url")
+        .eq("is_active", true)
+        .order("document_type"),
+      (supabase as any)
+        .from("partner_agreement_acceptances")
+        .select("agreement_documents!inner(document_type,is_active)")
+        .eq("agreement_documents.is_active", true),
+    ]).then(
+      ([documentsResult, acceptancesResult]: [
+        { data: AgreementDocument[] | null; error: { message: string } | null },
+        {
+          data:
+            | {
+                agreement_documents:
+                  | { document_type: AgreementDocument["document_type"] }
+                  | { document_type: AgreementDocument["document_type"] }[];
+              }[]
+            | null;
           error: { message: string } | null;
-        }) => {
-          if (error) toast.error(error.message);
-          else setDocuments(data || []);
-          setDocumentsLoading(false);
         },
-      );
+      ]) => {
+        if (documentsResult.error) toast.error(documentsResult.error.message);
+        else setDocuments(documentsResult.data || []);
+
+        if (acceptancesResult.error) toast.error(acceptancesResult.error.message);
+        else {
+          setSignedDocumentTypes(
+            new Set(
+              (acceptancesResult.data || []).flatMap((acceptance) => {
+                const joined = acceptance.agreement_documents;
+                return (Array.isArray(joined) ? joined : [joined]).map(
+                  (document) => document.document_type,
+                );
+              }),
+            ),
+          );
+        }
+        setDocumentsLoading(false);
+      },
+    );
   }, [user?.role]);
 
   useEffect(() => {
@@ -149,7 +177,7 @@ function Onboarding() {
                       </span>
                     </span>
                     <span className="flex shrink-0 items-center gap-2 text-xs font-medium">
-                      {status[document.document_type === "Agreement" ? "agreement" : "nda"] ? (
+                      {signedDocumentTypes.has(document.document_type) ? (
                         <>
                           <CheckCircle2 className="h-4 w-4 text-success" />
                           Signed
