@@ -161,6 +161,7 @@ async function main() {
   const privateDocumentPath = process.env.RLS_PARTNER_B_PRIVATE_DOCUMENT_PATH;
   const leadViewPath = process.env.RLS_PARTNER_B_LEAD_VIEW_PATH;
   const leadDeletePath = process.env.RLS_PARTNER_B_LEAD_DELETE_PATH;
+  const signaturePath = process.env.RLS_PARTNER_B_SIGNATURE_PATH;
   if (documentPath && privateDocumentPath && leadViewPath && leadDeletePath) {
     await expectStorageDenied(
       "Partner A cannot download Partner B document",
@@ -192,6 +193,20 @@ async function main() {
       "Deleted attachment is no longer downloadable",
       partnerB.storage.from("lead-attachments").download(leadDeletePath),
     );
+    if (signaturePath) {
+      await expectStorageSuccess(
+        "Partner B can download own uploaded signature",
+        partnerB.storage.from("partner-signatures").download(signaturePath),
+      );
+      await expectStorageDenied(
+        "Partner A cannot download Partner B uploaded signature",
+        partnerA.storage.from("partner-signatures").download(signaturePath),
+      );
+      await expectStorageSuccess(
+        "Admin can review an uploaded partner signature",
+        admin.storage.from("partner-signatures").download(signaturePath),
+      );
+    }
   }
 
   const { data: ownLead } = await partnerA

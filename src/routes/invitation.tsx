@@ -77,6 +77,7 @@ function Invitation() {
               value={fullName}
               onChange={(event) => setFullName(event.target.value)}
               autoComplete="name"
+              placeholder="Enter your full legal name"
               required
             />
           </div>

@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Agreement acceptance tables are newer than the generated client types. */
 import { createFileRoute, Navigate, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, ImageUp, PenLine, Printer, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { FormDialog } from "@/components/common/dialogs";
+import { FormattedText } from "@/components/common/FormattedText";
 import { PageContainer, PageHeader } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand/BrandLogo";
@@ -23,6 +24,9 @@ export const Route = createFileRoute("/_app/legal/$type")({ component: LegalDocu
 type AgreementAcceptance = {
   signer_name: string;
   signed_at: string;
+  signature_bucket: string | null;
+  signature_path: string | null;
+  signature_file_name: string | null;
 };
 
 type AgreementIssuer = {
@@ -48,6 +52,9 @@ function LegalDocumentPage() {
   const [signOpen, setSignOpen] = useState(false);
   const [signerName, setSignerName] = useState(user?.name || "");
   const [signatureConfirmed, setSignatureConfirmed] = useState(false);
+  const [signatureMode, setSignatureMode] = useState<"typed" | "upload">("typed");
+  const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [signaturePreview, setSignaturePreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (!supabase || user?.role !== "partner" || !user.partnerId) {
@@ -59,7 +66,9 @@ function LegalDocumentPage() {
     void Promise.all([
       (supabase as any)
         .from("partner_agreement_acceptances")
-        .select("signer_name,signed_at,agreement_documents!inner(document_type,is_active)")
+        .select(
+          "signer_name,signed_at,signature_bucket,signature_path,signature_file_name,agreement_documents!inner(document_type,is_active)",
+        )
         .eq("partner_id", user.partnerId)
         .eq("agreement_documents.document_type", documentType)
         .eq("agreement_documents.is_active", true)
@@ -85,6 +94,21 @@ function LegalDocumentPage() {
       cancelled = true;
     };
   }, [documentType, user?.partnerId, user?.role]);
+
+  useEffect(() => {
+    if (!supabase || !acceptance?.signature_path) return;
+    let active = true;
+    void supabase.storage
+      .from(acceptance.signature_bucket || "partner-signatures")
+      .createSignedUrl(acceptance.signature_path, 900)
+      .then(({ data, error }) => {
+        if (!active || error) return;
+        setSignaturePreview(data.signedUrl);
+      });
+    return () => {
+      active = false;
+    };
+  }, [acceptance?.signature_bucket, acceptance?.signature_path]);
 
   if (type !== "agreement" && type !== "nda") return <Navigate to="/onboarding" replace />;
 
@@ -168,8 +192,8 @@ function LegalDocumentPage() {
             </div>
 
             {customAgreementText ? (
-              <section className="whitespace-pre-wrap text-sm leading-7 text-slate-700 sm:text-base">
-                {populateLegalText(customAgreementText, commissionRate)}
+              <section>
+                <FormattedText value={populateLegalText(customAgreementText, commissionRate)} />
               </section>
             ) : (
               sections.map((section, index) => (
@@ -218,10 +242,23 @@ function LegalDocumentPage() {
                   ) : acceptance ? (
                     <>
                       <div className="pt-5">
-                        Electronic signature:{" "}
-                        <span className="font-serif text-base italic">
-                          {acceptance.signer_name}
-                        </span>
+                        {acceptance.signature_path && signaturePreview ? (
+                          <div>
+                            <div className="mb-2 text-xs text-slate-500">Uploaded signature</div>
+                            <img
+                              src={signaturePreview}
+                              alt={`${acceptance.signer_name}'s signature`}
+                              className="h-16 max-w-56 object-contain object-left"
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            Electronic signature:{" "}
+                            <span className="font-serif text-base italic">
+                              {acceptance.signer_name}
+                            </span>
+                          </>
+                        )}
                       </div>
                       <div>
                         Date:{" "}
@@ -251,20 +288,72 @@ function LegalDocumentPage() {
         open={signOpen}
         onOpenChange={(open) => {
           setSignOpen(open);
-          if (!open) setSignatureConfirmed(false);
+          if (!open) {
+            setSignatureConfirmed(false);
+            setSignatureFile(null);
+            setSignatureMode("typed");
+          }
         }}
         title={`Sign ${title}`}
         description={`This signature applies only to the current ${documentType}. The other document must be signed separately.`}
         submitLabel={`Sign ${documentType}`}
-        canSubmit={Boolean(signerName.trim()) && signatureConfirmed}
+        canSubmit={
+          Boolean(signerName.trim()) &&
+          signatureConfirmed &&
+          (signatureMode === "typed" || Boolean(signatureFile))
+        }
         onSubmit={async () => {
-          const result = await signAgreementDocument(documentType, signerName.trim());
+          let uploadedPath: string | null = null;
+          if (signatureMode === "upload") {
+            if (!supabase || !user || !signatureFile) {
+              toast.error("Choose a signature image before signing.");
+              return;
+            }
+            if (!["image/png", "image/jpeg", "image/webp"].includes(signatureFile.type)) {
+              toast.error("Upload a PNG, JPEG, or WebP signature image.");
+              return;
+            }
+            if (signatureFile.size > 2 * 1024 * 1024) {
+              toast.error("Signature image must be 2MB or smaller.");
+              return;
+            }
+            const extension = signatureFile.name.split(".").pop()?.toLowerCase() || "png";
+            uploadedPath = `${user.id}/${documentType.toLowerCase()}/${crypto.randomUUID()}.${extension}`;
+            const { error: uploadError } = await supabase.storage
+              .from("partner-signatures")
+              .upload(uploadedPath, signatureFile, {
+                cacheControl: "3600",
+                contentType: signatureFile.type,
+                upsert: false,
+              });
+            if (uploadError) {
+              toast.error(`Signature upload failed: ${uploadError.message}`);
+              return;
+            }
+          }
+
+          const result = await signAgreementDocument(
+            documentType,
+            signerName.trim(),
+            uploadedPath && signatureFile
+              ? { path: uploadedPath, fileName: signatureFile.name }
+              : undefined,
+          );
           if (result.error) {
+            if (uploadedPath && supabase) {
+              await supabase.storage.from("partner-signatures").remove([uploadedPath]);
+            }
             toast.error(result.error);
             return;
           }
           const signedAt = new Date().toISOString();
-          setAcceptance({ signer_name: signerName.trim(), signed_at: signedAt });
+          setAcceptance({
+            signer_name: signerName.trim(),
+            signed_at: signedAt,
+            signature_bucket: uploadedPath ? "partner-signatures" : null,
+            signature_path: uploadedPath,
+            signature_file_name: signatureFile?.name || null,
+          });
           setSignOpen(false);
           setSignatureConfirmed(false);
           toast.success(
@@ -274,15 +363,62 @@ function LegalDocumentPage() {
           );
         }}
       >
+        <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1">
+          <Button
+            type="button"
+            variant={signatureMode === "typed" ? "default" : "ghost"}
+            onClick={() => setSignatureMode("typed")}
+          >
+            <PenLine />
+            Type signature
+          </Button>
+          <Button
+            type="button"
+            variant={signatureMode === "upload" ? "default" : "ghost"}
+            onClick={() => setSignatureMode("upload")}
+          >
+            <ImageUp />
+            Upload signature
+          </Button>
+        </div>
         <label className="block text-xs font-medium">
-          Electronic signature
+          Legal name
           <input
             className="mt-1 h-10 w-full rounded-md border bg-background px-3 font-serif text-base italic"
             value={signerName}
             onChange={(event) => setSignerName(event.target.value)}
             autoComplete="name"
+            placeholder="Enter your full legal name"
           />
         </label>
+        {signatureMode === "upload" && (
+          <label className="block text-xs font-medium">
+            Signature image
+            <span className="mt-2 flex cursor-pointer items-center gap-3 rounded-md border border-dashed p-4 transition-colors hover:bg-accent/30">
+              <Upload className="h-5 w-5 text-muted-foreground" />
+              <span>
+                {signatureFile
+                  ? signatureFile.name
+                  : "Choose a transparent PNG, JPEG, or WebP (maximum 2MB)"}
+              </span>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="sr-only"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] || null;
+                  if (file && file.size > 2 * 1024 * 1024) {
+                    toast.error("Signature image must be 2MB or smaller.");
+                    event.target.value = "";
+                    setSignatureFile(null);
+                    return;
+                  }
+                  setSignatureFile(file);
+                }}
+              />
+            </span>
+          </label>
+        )}
         <label className="block text-xs font-medium">
           Signature date
           <input

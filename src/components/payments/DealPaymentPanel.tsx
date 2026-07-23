@@ -180,6 +180,7 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={form.amount}
               onChange={(event) => setForm({ ...form, amount: event.target.value })}
+              placeholder="e.g. 5000.00"
             />
           </label>
           <label className="text-xs">

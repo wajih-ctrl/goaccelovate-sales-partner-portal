@@ -261,6 +261,7 @@ function ClientPayments() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={form.amount}
               onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              placeholder="e.g. 5000.00"
             />
           </label>
           <label className="text-xs">
@@ -302,6 +303,7 @@ function ClientPayments() {
             className="mt-1 w-full rounded-md border bg-background p-2 text-sm"
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            placeholder="Optional internal context for this payment"
           />
         </label>
         <div className="rounded-md border bg-accent/20 p-3 text-xs text-muted-foreground">

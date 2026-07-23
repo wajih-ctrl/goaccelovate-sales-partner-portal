@@ -297,6 +297,7 @@ function Pipeline() {
             className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
             value={confirmedValue}
             onChange={(e) => setConfirmedValue(e.target.value)}
+            placeholder="e.g. 25000"
           />
         </label>
         <p className="text-xs text-muted-foreground">

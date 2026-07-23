@@ -38,18 +38,20 @@ export function ReasonDialog({
         if (!b) setReason("");
       }}
     >
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
-        <textarea
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder={placeholder || "Provide a reason (required)…"}
-          rows={4}
-          className="w-full rounded-md border bg-background p-3 text-sm"
-        />
+        <div className="scrollbar-hidden min-h-0 overflow-y-auto">
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder={placeholder || "Provide a reason (required)..."}
+            rows={4}
+            className="w-full rounded-md border bg-background p-3 text-sm"
+          />
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
@@ -83,6 +85,7 @@ export function FormDialog({
   onSubmit,
   submitLabel = "Save",
   canSubmit = true,
+  className,
 }: {
   open: boolean;
   onOpenChange: (b: boolean) => void;
@@ -92,16 +95,24 @@ export function FormDialog({
   onSubmit: () => void | Promise<void>;
   submitLabel?: string;
   canSubmit?: boolean;
+  className?: string;
 }) {
   const [submitting, setSubmitting] = useState(false);
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+      <DialogContent
+        className={`max-h-[calc(100dvh-2rem)] max-w-lg grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden ${className || ""}`}
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
-        <div className="-mr-2 min-h-0 space-y-3 overflow-y-auto pr-2">{children}</div>
+        <div
+          data-form-dialog-body
+          className="scrollbar-hidden min-h-0 space-y-4 overflow-y-auto py-1 pr-1"
+        >
+          {children}
+        </div>
         <DialogFooter>
           <Button variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
             Cancel

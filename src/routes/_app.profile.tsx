@@ -3,6 +3,7 @@ import { PageHeader, PageContainer, StatusBadge } from "@/components/layout/AppS
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LocationCombobox } from "@/components/LocationCombobox";
+import { PhoneInput } from "@/components/common/PhoneInput";
 import { useAuth } from "@/lib/auth";
 import { useStore } from "@/lib/store";
 import type { Partner } from "@/lib/domain";
@@ -214,6 +215,7 @@ function Profile() {
                   className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
                   value={p.name}
                   onChange={(e) => updateDraft({ name: e.target.value })}
+                  placeholder="Enter your full name"
                   required
                 />
               </div>
@@ -232,11 +234,12 @@ function Profile() {
                 <label htmlFor="profile-phone" className="text-xs uppercase text-muted-foreground">
                   Phone
                 </label>
-                <input
+                <PhoneInput
                   id="profile-phone"
-                  className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
                   value={p.phone}
-                  onChange={(e) => updateDraft({ phone: e.target.value })}
+                  onChange={(phone) => updateDraft({ phone })}
+                  defaultCountry={p.country}
+                  placeholder="e.g. 300 1234567"
                   required
                 />
               </div>
@@ -252,6 +255,7 @@ function Profile() {
                   className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
                   value={p.linkedin}
                   onChange={(e) => updateDraft({ linkedin: e.target.value })}
+                  placeholder="https://www.linkedin.com/in/your-profile"
                 />
               </div>
               <div>
@@ -289,6 +293,7 @@ function Profile() {
                 className="mt-1 w-full rounded-md border bg-background p-3 text-sm"
                 value={p.bio}
                 onChange={(e) => updateDraft({ bio: e.target.value })}
+                placeholder="Share your professional background, industries, and client relationships."
                 required
               />
             </div>

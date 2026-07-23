@@ -344,6 +344,7 @@ function Commissions() {
             className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
             value={newRate}
             onChange={(e) => setNewRate(e.target.value)}
+            placeholder="e.g. 10"
           />
         </label>
         <label className="text-xs">
@@ -444,6 +445,7 @@ function Commissions() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={manual.amount}
               onChange={(e) => setManual({ ...manual, amount: e.target.value })}
+              placeholder="e.g. 1000.00"
             />
           </label>
           <label className="text-xs">
@@ -454,6 +456,7 @@ function Commissions() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={manual.rate}
               onChange={(e) => setManual({ ...manual, rate: e.target.value })}
+              placeholder="Optional"
             />
           </label>
         </div>
@@ -464,6 +467,7 @@ function Commissions() {
             className="mt-1 w-full rounded-md border bg-background p-2 text-sm"
             value={manual.notes}
             onChange={(e) => setManual({ ...manual, notes: e.target.value })}
+            placeholder="Add supporting context for this commission line"
           />
         </label>
       </FormDialog>

@@ -3,7 +3,6 @@ import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   CheckCircle2,
-  Circle,
   FileSignature,
   FileText,
   Handshake,
@@ -12,6 +11,7 @@ import {
   PlayCircle,
   Rocket,
   ShieldCheck,
+  LockKeyhole,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -119,10 +119,15 @@ function Onboarding() {
   if (user?.role !== "partner") return <Navigate to="/access-denied" />;
   const status: Record<string, boolean> = {
     ...(onboarding[user.partnerId!] || {}),
+    agreement: Boolean(
+      onboarding[user.partnerId!]?.agreement || signedDocumentTypes.has("Agreement"),
+    ),
+    nda: Boolean(onboarding[user.partnerId!]?.nda || signedDocumentTypes.has("NDA")),
     welcome: Boolean(welcomeAcknowledged || onboarding[user.partnerId!]?.welcome),
   };
   const done = ONBOARDING_STEPS.filter((step) => status[step.key]).length;
   const pct = Math.round((done / ONBOARDING_STEPS.length) * 100);
+  const currentStepIndex = ONBOARDING_STEPS.findIndex((step) => !status[step.key]);
   const documentsReady =
     documents.length >= 2 && documents.every((document) => document.content_url);
   const introductionVideoEmbed = youtubeEmbedUrl(settings.welcomeIntroVideoUrl);
@@ -144,6 +149,57 @@ function Onboarding() {
         description="Finish your partner setup and start building your pipeline."
       />
       <PageContainer>
+        <Card className="p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-semibold">
+                {done} of {ONBOARDING_STEPS.length} program steps complete
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Complete each step in order to unlock the next part of your partner journey.
+              </p>
+            </div>
+            <div className="text-2xl font-semibold">{pct}%</div>
+          </div>
+          <div className="my-5 h-2 w-full overflow-hidden rounded-full bg-accent">
+            <div className="h-full bg-gradient-brand transition-all" style={{ width: `${pct}%` }} />
+          </div>
+          <ol className="grid gap-3 md:grid-cols-5">
+            {ONBOARDING_STEPS.map((step, index) => {
+              const complete = status[step.key];
+              const active = index === currentStepIndex;
+              const locked = currentStepIndex >= 0 && index > currentStepIndex;
+              return (
+                <li
+                  key={step.key}
+                  className={`relative flex items-center gap-3 rounded-md border p-3 ${
+                    complete
+                      ? "border-success/25 bg-success/5"
+                      : active
+                        ? "border-foreground bg-accent/30"
+                        : "bg-muted/30 text-muted-foreground"
+                  }`}
+                >
+                  <span
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
+                      complete ? "border-success bg-success text-white" : "bg-background"
+                    }`}
+                  >
+                    {complete ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : locked ? (
+                      <LockKeyhole className="h-3.5 w-3.5" />
+                    ) : (
+                      index + 1
+                    )}
+                  </span>
+                  <span className="text-xs font-medium leading-4">{step.label}</span>
+                </li>
+              );
+            })}
+          </ol>
+        </Card>
+
         {user.agreementsComplete === false && (
           <Card className="space-y-5 p-5">
             <div className="flex items-start gap-3">
@@ -208,177 +264,158 @@ function Onboarding() {
 
         {user.agreementsComplete !== false && (
           <Card className="space-y-6 p-5">
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <div>
-                <div className="text-sm font-semibold">
-                  {done} of {ONBOARDING_STEPS.length} program steps complete
+            {!status.profile && (
+              <div className="flex flex-col justify-between gap-4 rounded-md border p-4 sm:flex-row sm:items-center">
+                <div>
+                  <h2 className="font-semibold">Complete your partner profile</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Add your contact information and professional background to unlock the welcome
+                    kit.
+                  </p>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Agreement access is complete. Remaining steps are managed with your program
-                  contact.
-                </div>
+                <Button asChild>
+                  <Link to="/profile">Complete profile</Link>
+                </Button>
               </div>
-              <div className="text-2xl font-semibold">{pct}%</div>
-            </div>
-            <div className="mb-6 h-2 w-full overflow-hidden rounded-full bg-accent">
-              <div
-                className="h-full bg-gradient-brand transition-all"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <ul className="space-y-2">
-              {ONBOARDING_STEPS.map((step) => {
-                const complete = status[step.key];
-                const destination =
-                  step.key === "profile"
-                    ? ("/profile" as const)
-                    : step.key === "firstLead"
-                      ? ("/submit-lead" as const)
-                      : null;
-                const content = (
-                  <>
-                    {complete ? (
-                      <CheckCircle2 className="h-5 w-5 text-success" />
-                    ) : (
-                      <Circle className="h-5 w-5 text-muted-foreground" />
-                    )}
-                    <span className={complete ? "text-foreground" : "text-muted-foreground"}>
-                      {step.label}
-                    </span>
-                  </>
-                );
-                return (
-                  <li
-                    key={step.key}
-                    className={`rounded-md border ${complete ? "border-success/20 bg-success/5" : ""}`}
-                  >
-                    {destination ? (
-                      <Link
-                        to={destination}
-                        className="flex items-center gap-3 p-3 transition-colors hover:bg-accent/30"
-                      >
-                        {content}
-                      </Link>
-                    ) : (
-                      <div className="flex items-center gap-3 p-3">{content}</div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-            <section className="border-t pt-5" aria-labelledby="welcome-kit-title">
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                <div className="max-w-2xl">
-                  <div className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-                    <BrandLogo
-                      tone="black"
-                      className="h-11 w-auto max-w-full object-contain sm:h-14 sm:max-w-[230px]"
-                    />
-                    <div>
-                      <h3 id="welcome-kit-title" className="font-semibold">
-                        Global Partner Program Welcome Kit
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Your starting point for representing GoAccelovate with confidence.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mb-3 overflow-hidden rounded-md border bg-black">
-                    {introductionVideoEmbed ? (
-                      <iframe
-                        src={introductionVideoEmbed}
-                        title="GoAccelovate introduction video"
-                        className="aspect-video w-full"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowFullScreen
+            )}
+            {status.profile && (
+              <section
+                id="welcome-kit"
+                className="border-t pt-5"
+                aria-labelledby="welcome-kit-title"
+              >
+                <div className="space-y-5">
+                  <div className="w-full">
+                    <div className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+                      <BrandLogo
+                        tone="black"
+                        className="h-11 w-auto max-w-full object-contain sm:h-14 sm:max-w-[230px]"
                       />
-                    ) : (
-                      <div className="flex aspect-video items-center justify-center text-sm text-white/70">
-                        Introduction video preview is unavailable.
-                      </div>
-                    )}
-                    <a
-                      href={settings.welcomeIntroVideoUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-3 border-t border-white/15 px-4 py-3 text-white transition-colors hover:bg-white/10"
-                    >
-                      <PlayCircle className="h-5 w-5 shrink-0" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium">Introduction video</span>
-                        <span className="block text-xs text-white/60">
-                          Welcome from the VP of Global Client Relations.
-                        </span>
-                      </span>
-                      <ExternalLink className="h-4 w-4 shrink-0" />
-                    </a>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <a
-                      href="https://www.youtube.com/@GoAccelovate/playlists"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex gap-3 rounded-md border p-3 transition-colors hover:bg-accent/30"
-                    >
-                      <Rocket className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
                       <div>
-                        <div className="flex items-center gap-2 text-sm font-medium">
-                          Explore our Use Cases <ExternalLink className="h-3.5 w-3.5" />
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Browse GoAccelovate's solution and industry playlists.
+                        <h3 id="welcome-kit-title" className="font-semibold">
+                          Global Partner Program Welcome Kit
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          Your starting point for representing GoAccelovate with confidence.
                         </p>
                       </div>
-                    </a>
-                    <a
-                      href="https://www.goaccelovate.com/case-studies"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex gap-3 rounded-md border p-3 transition-colors hover:bg-accent/30"
-                    >
-                      <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
-                      <div>
-                        <div className="flex items-center gap-2 text-sm font-medium">
-                          Explore our Case Studies <ExternalLink className="h-3.5 w-3.5" />
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          See how GoAccelovate delivers measurable client outcomes.
-                        </p>
-                      </div>
-                    </a>
-                    <a
-                      href="https://canva.link/c3278nhyl1ahyj5"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex gap-3 rounded-md border p-3 transition-colors hover:bg-accent/30"
-                    >
-                      <Handshake className="mt-0.5 h-5 w-5 shrink-0 text-brand" />
-                      <div>
-                        <div className="flex items-center gap-2 text-sm font-medium">
-                          View Company Profile <ExternalLink className="h-3.5 w-3.5" />
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Open the current GoAccelovate company profile.
-                        </p>
-                      </div>
-                    </a>
-                  </div>
-                </div>
-                <div className="shrink-0 lg:pt-14">
-                  {status.welcome ? (
-                    <div className="flex items-center gap-2 text-sm font-medium text-success">
-                      <CheckCircle2 className="h-5 w-5" />
-                      Welcome kit acknowledged
                     </div>
-                  ) : (
-                    <Button onClick={acknowledgeWelcomeKit} disabled={welcomeLoading}>
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                      {welcomeLoading ? "Saving..." : "Acknowledge welcome kit"}
-                    </Button>
-                  )}
+                    <div className="mb-4 w-full overflow-hidden rounded-md border bg-black">
+                      {introductionVideoEmbed ? (
+                        <iframe
+                          src={introductionVideoEmbed}
+                          title="GoAccelovate introduction video"
+                          className="aspect-video w-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                        />
+                      ) : (
+                        <div className="flex aspect-video items-center justify-center text-sm text-white/70">
+                          Introduction video preview is unavailable.
+                        </div>
+                      )}
+                      <a
+                        href={settings.welcomeIntroVideoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-3 border-t border-white/15 px-4 py-3 text-white transition-colors hover:bg-white/10"
+                      >
+                        <PlayCircle className="h-5 w-5 shrink-0" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium">Introduction video</span>
+                          <span className="block text-xs text-white/60">
+                            Welcome from the VP of Global Client Relations.
+                          </span>
+                        </span>
+                        <ExternalLink className="h-4 w-4 shrink-0" />
+                      </a>
+                    </div>
+                    <div className="grid gap-3 lg:grid-cols-3">
+                      <a
+                        href="https://www.youtube.com/@GoAccelovate/playlists"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group flex min-h-32 items-center gap-4 rounded-md border border-zinc-700 bg-zinc-950 p-5 text-white shadow-elevated transition-colors hover:bg-zinc-900"
+                      >
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-white/25 bg-white/10">
+                          <Rocket className="h-6 w-6" />
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2 text-sm font-medium">
+                            Explore our Use Cases <ExternalLink className="h-3.5 w-3.5" />
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-white/65">
+                            Browse GoAccelovate's solution and industry playlists.
+                          </p>
+                        </div>
+                      </a>
+                      <a
+                        href="https://www.goaccelovate.com/case-studies"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group flex min-h-32 items-center gap-4 rounded-md border border-zinc-700 bg-zinc-950 p-5 text-white shadow-elevated transition-colors hover:bg-zinc-900"
+                      >
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-white/25 bg-white/10">
+                          <ShieldCheck className="h-6 w-6" />
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2 text-sm font-medium">
+                            Explore our Case Studies <ExternalLink className="h-3.5 w-3.5" />
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-white/65">
+                            See how GoAccelovate delivers measurable client outcomes.
+                          </p>
+                        </div>
+                      </a>
+                      <a
+                        href="https://canva.link/c3278nhyl1ahyj5"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group flex min-h-32 items-center gap-4 rounded-md border border-zinc-700 bg-zinc-950 p-5 text-white shadow-elevated transition-colors hover:bg-zinc-900"
+                      >
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-white/25 bg-white/10">
+                          <Handshake className="h-6 w-6" />
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2 text-sm font-medium">
+                            View Company Profile <ExternalLink className="h-3.5 w-3.5" />
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-white/65">
+                            Open the current GoAccelovate company profile.
+                          </p>
+                        </div>
+                      </a>
+                    </div>
+                  </div>
+                  <div className="flex justify-end border-t pt-5">
+                    {status.welcome ? (
+                      <div className="flex items-center gap-2 rounded-md border border-success/25 bg-success/5 px-4 py-2 text-sm font-medium text-success">
+                        <CheckCircle2 className="h-5 w-5" />
+                        Welcome kit acknowledged
+                      </div>
+                    ) : (
+                      <Button onClick={acknowledgeWelcomeKit} disabled={welcomeLoading}>
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        {welcomeLoading ? "Saving..." : "Acknowledge welcome kit"}
+                      </Button>
+                    )}
+                  </div>
                 </div>
+              </section>
+            )}
+            {status.welcome && !status.firstLead && (
+              <div className="flex flex-col justify-between gap-4 rounded-md border p-4 sm:flex-row sm:items-center">
+                <div>
+                  <h2 className="font-semibold">Submit your first lead</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Your onboarding setup is ready. Add your first qualified opportunity to finish.
+                  </p>
+                </div>
+                <Button asChild>
+                  <Link to="/submit-lead">Submit first lead</Link>
+                </Button>
               </div>
-            </section>
+            )}
             {documentsReady && (
               <div className="border-t pt-5">
                 <h3 className="mb-3 text-sm font-semibold">Signed documents</h3>

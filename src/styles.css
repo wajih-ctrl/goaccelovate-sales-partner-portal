@@ -132,6 +132,23 @@
   textarea {
     font: inherit;
   }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  select,
+  textarea {
+    min-width: 0;
+  }
+  select:not([multiple]) {
+    padding-right: 2.5rem !important;
+    background-position: right 0.85rem center;
+  }
+  [data-form-dialog-body] label {
+    line-height: 1.35;
+  }
+  [data-form-dialog-body] label > input:not([type="checkbox"]):not([type="radio"]),
+  [data-form-dialog-body] label > select,
+  [data-form-dialog-body] label > textarea {
+    margin-top: 0.5rem;
+  }
   table {
     width: max-content;
     min-width: 44rem;
@@ -199,6 +216,15 @@
       max-width: 100%;
     }
   }
+}
+
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
 }
 
 @utility shadow-card {

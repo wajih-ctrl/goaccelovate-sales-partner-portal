@@ -43,6 +43,7 @@ const createdUserIds = [];
 const storageObjects = {
   "partner-documents": [],
   "lead-attachments": [],
+  "partner-signatures": [],
 };
 const seeded = {};
 
@@ -172,7 +173,7 @@ try {
           currency: "USD",
           description:
             "Temporary RLS verification lead with sufficient description content for validation.",
-          stage: "Identified Opportunity",
+          stage: "Advance Confirmed",
           status: "Open",
           created_by: partnerBUser.id,
         },
@@ -308,6 +309,7 @@ try {
   const privateDocumentPath = `${partnerBUser.id}/${stamp}/private.pdf`;
   const leadViewPath = `${partnerBUser.id}/${leadB.id}/view.pdf`;
   const leadDeletePath = `${partnerBUser.id}/${leadB.id}/delete.pdf`;
+  const signaturePath = `${partnerBUser.id}/agreement/${stamp}.png`;
   for (const path of [documentPath, privateDocumentPath]) {
     await must(
       service.storage
@@ -330,6 +332,15 @@ try {
     );
     storageObjects["lead-attachments"].push(path);
   }
+  await must(
+    service.storage
+      .from("partner-signatures")
+      .upload(signaturePath, new TextEncoder().encode("RLS signature image"), {
+        contentType: "image/png",
+      }),
+    "Upload partner signature",
+  );
+  storageObjects["partner-signatures"].push(signaturePath);
   await must(
     service.from("partner_documents").insert([
       {
@@ -384,6 +395,7 @@ try {
       RLS_PARTNER_B_PRIVATE_DOCUMENT_PATH: privateDocumentPath,
       RLS_PARTNER_B_LEAD_VIEW_PATH: leadViewPath,
       RLS_PARTNER_B_LEAD_DELETE_PATH: leadDeletePath,
+      RLS_PARTNER_B_SIGNATURE_PATH: signaturePath,
     },
   });
   if (verification.stdout) process.stdout.write(verification.stdout);

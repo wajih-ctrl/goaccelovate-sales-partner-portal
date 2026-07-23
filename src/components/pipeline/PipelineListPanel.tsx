@@ -291,6 +291,7 @@ export function PipelineListPanel() {
             value={confirmedValue}
             onChange={(event) => setConfirmedValue(event.target.value)}
             className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+            placeholder="e.g. 25000"
           />
         </label>
       </FormDialog>

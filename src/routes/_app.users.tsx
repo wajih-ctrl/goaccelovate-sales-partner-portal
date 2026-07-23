@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useState } from "react";
 import { FormDialog, ReasonDialog } from "@/components/common/dialogs";
+import { RichTextEditor } from "@/components/common/RichTextEditor";
 import { revokeRealInvitation, sendRealInvitation } from "@/lib/real-invitations";
 import { deleteRealUser } from "@/lib/real-users";
 import { PARTNER_AGREEMENT_EDITABLE_TEXT } from "@/lib/legal-documents";
@@ -291,6 +292,8 @@ function UsersPage() {
         open={showInvite}
         onOpenChange={setShowInvite}
         title="Invite new user"
+        description="Add the account details, then review the partner agreement before sending."
+        className="max-w-3xl"
         canSubmit={
           !inviteLoading &&
           !!invite.name.trim() &&
@@ -345,6 +348,8 @@ function UsersPage() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={invite.name}
               onChange={(e) => setInvite({ ...invite, name: e.target.value })}
+              placeholder="e.g. Alex Morgan"
+              autoComplete="name"
             />
           </label>
           <label className="text-xs">
@@ -354,6 +359,8 @@ function UsersPage() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={invite.email}
               onChange={(e) => setInvite({ ...invite, email: e.target.value })}
+              placeholder="alex@company.com"
+              autoComplete="email"
             />
           </label>
           <label className="text-xs">
@@ -378,22 +385,25 @@ function UsersPage() {
                 className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
                 value={invite.commissionRate}
                 onChange={(e) => setInvite({ ...invite, commissionRate: e.target.value })}
+                placeholder="10"
               />
             </label>
           )}
         </div>
         {invite.role === "partner" && (
           <>
-            <label className="text-xs">
+            <label className="block text-xs">
               Partner agreement text
-              <textarea
-                rows={7}
-                className="mt-1 w-full rounded-md border bg-background p-3 font-mono text-xs leading-5"
-                value={invite.agreementText}
-                onChange={(e) => setInvite({ ...invite, agreementText: e.target.value })}
-              />
+              <div className="mt-2">
+                <RichTextEditor
+                  minHeight="12rem"
+                  value={invite.agreementText}
+                  onChange={(agreementText) => setInvite({ ...invite, agreementText })}
+                  placeholder="Enter the Sales Partner agreement..."
+                />
+              </div>
               <span className="mt-1 block text-muted-foreground">
-                Edit this invitation's agreement. Keep placeholders such as
+                Formatting is preserved in the partner's document. Keep placeholders such as
                 {" {{COMMISSION_RATE}} "}
                 where dynamic values should appear.
               </span>
@@ -450,6 +460,7 @@ function UsersPage() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={rateTarget.rate}
               onChange={(e) => setRateTarget({ ...rateTarget, rate: e.target.value })}
+              placeholder="e.g. 10"
             />
           </label>
         )}

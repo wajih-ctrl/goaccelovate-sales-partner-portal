@@ -185,7 +185,7 @@ function AuditLog() {
         </Card>
       </PageContainer>
       <Dialog open={!!selectedEntry} onOpenChange={(open) => !open && setSelectedEntry(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
           <DialogHeader>
             <DialogTitle>{selectedEntry?.action}</DialogTitle>
             <DialogDescription>
@@ -194,7 +194,7 @@ function AuditLog() {
             </DialogDescription>
           </DialogHeader>
           {selectedEntry && (
-            <div className="space-y-4 text-sm">
+            <div className="scrollbar-hidden min-h-0 space-y-4 overflow-y-auto pr-1 text-sm">
               <div className="grid gap-3 rounded-md border bg-accent/20 p-4 sm:grid-cols-2">
                 <div>
                   <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">

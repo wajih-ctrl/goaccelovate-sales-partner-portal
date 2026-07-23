@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useState, type ReactNode } from "react";
 import { Upload, AlertCircle, CheckCircle2 } from "lucide-react";
 import { COUNTRIES, INDUSTRIES } from "@/lib/program";
+import { PhoneInput } from "@/components/common/PhoneInput";
 
 export const Route = createFileRoute("/_app/submit-lead")({
   component: SubmitLead,
@@ -194,6 +195,7 @@ function SubmitLead() {
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                 value={form.company}
                 onChange={(e) => set("company", e.target.value)}
+                placeholder="e.g. Acme Corporation"
               />
             </Field>
             <Field label="Country" required error={errors.country}>
@@ -213,6 +215,7 @@ function SubmitLead() {
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                 value={form.contactName}
                 onChange={(e) => set("contactName", e.target.value)}
+                placeholder="e.g. Jordan Lee"
               />
             </Field>
             <Field label="Job title" required error={errors.contactTitle}>
@@ -220,6 +223,7 @@ function SubmitLead() {
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                 value={form.contactTitle}
                 onChange={(e) => set("contactTitle", e.target.value)}
+                placeholder="e.g. Chief Operating Officer"
               />
             </Field>
             <Field label="Email address" required error={errors.contactEmail}>
@@ -227,13 +231,15 @@ function SubmitLead() {
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                 value={form.contactEmail}
                 onChange={(e) => set("contactEmail", e.target.value)}
+                placeholder="jordan@company.com"
               />
             </Field>
             <Field label="Phone">
-              <input
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+              <PhoneInput
                 value={form.contactPhone}
-                onChange={(e) => set("contactPhone", e.target.value)}
+                onChange={(contactPhone) => set("contactPhone", contactPhone)}
+                defaultCountry={form.country}
+                placeholder="e.g. 300 1234567"
               />
             </Field>
             <Field label="Client LinkedIn">

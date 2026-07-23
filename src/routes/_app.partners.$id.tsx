@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { FormDialog } from "@/components/common/dialogs";
+import { PhoneInput } from "@/components/common/PhoneInput";
 
 export const Route = createFileRoute("/_app/partners/$id")({ component: PartnerDetail });
 
@@ -438,6 +439,7 @@ function PartnerDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={profileForm.name}
               onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+              placeholder="e.g. Alex Morgan"
             />
           </label>
           <label className="text-xs">
@@ -447,14 +449,16 @@ function PartnerDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={profileForm.email}
               onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+              placeholder="alex@company.com"
             />
           </label>
           <label className="text-xs">
             Phone
-            <input
-              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+            <PhoneInput
               value={profileForm.phone}
-              onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+              onChange={(phone) => setProfileForm({ ...profileForm, phone })}
+              defaultCountry={profileForm.country}
+              placeholder="e.g. 300 1234567"
             />
           </label>
           <label className="text-xs">
@@ -463,6 +467,7 @@ function PartnerDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={profileForm.linkedin}
               onChange={(e) => setProfileForm({ ...profileForm, linkedin: e.target.value })}
+              placeholder="https://www.linkedin.com/in/..."
             />
           </label>
           <label className="text-xs">
@@ -471,6 +476,7 @@ function PartnerDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={profileForm.city}
               onChange={(e) => setProfileForm({ ...profileForm, city: e.target.value })}
+              placeholder="e.g. Dubai"
             />
           </label>
           <label className="text-xs">
@@ -479,6 +485,7 @@ function PartnerDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={profileForm.country}
               onChange={(e) => setProfileForm({ ...profileForm, country: e.target.value })}
+              placeholder="e.g. United Arab Emirates"
             />
           </label>
         </div>
@@ -488,6 +495,7 @@ function PartnerDetail() {
             className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
             value={profileForm.assignedContact}
             onChange={(e) => setProfileForm({ ...profileForm, assignedContact: e.target.value })}
+            placeholder="GoAccelovate contact name"
           />
         </label>
         <label className="text-xs">
@@ -497,6 +505,7 @@ function PartnerDetail() {
             className="mt-1 w-full rounded-md border bg-background p-2 text-sm"
             value={profileForm.bio}
             onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
+            placeholder="Professional background, industries, and client relationships"
           />
         </label>
       </FormDialog>
@@ -529,6 +538,7 @@ function PartnerDetail() {
             className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
             value={commercialForm.rate}
             onChange={(e) => setCommercialForm({ ...commercialForm, rate: e.target.value })}
+            placeholder="e.g. 10"
           />
         </label>
         {user?.role === "super_admin" && (

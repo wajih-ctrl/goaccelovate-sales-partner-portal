@@ -23,6 +23,7 @@ import {
   Phone,
 } from "lucide-react";
 import { FormDialog, ReasonDialog } from "@/components/common/dialogs";
+import { PhoneInput } from "@/components/common/PhoneInput";
 import { DealPaymentPanel } from "@/components/payments/DealPaymentPanel";
 import {
   canMoveLeadStage,
@@ -778,6 +779,7 @@ function LeadDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={edit.company}
               onChange={(event) => setEdit({ ...edit, company: event.target.value })}
+              placeholder="e.g. Acme Corporation"
             />
           </label>
           <label className="text-xs">
@@ -786,6 +788,7 @@ function LeadDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={edit.contactName}
               onChange={(event) => setEdit({ ...edit, contactName: event.target.value })}
+              placeholder="e.g. Jordan Lee"
             />
           </label>
           <label className="text-xs">
@@ -794,6 +797,7 @@ function LeadDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={edit.contactTitle}
               onChange={(event) => setEdit({ ...edit, contactTitle: event.target.value })}
+              placeholder="e.g. Chief Operating Officer"
             />
           </label>
           <label className="text-xs">
@@ -803,14 +807,16 @@ function LeadDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={edit.contactEmail}
               onChange={(event) => setEdit({ ...edit, contactEmail: event.target.value })}
+              placeholder="jordan@company.com"
             />
           </label>
           <label className="text-xs">
             Contact phone (optional)
-            <input
-              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+            <PhoneInput
               value={edit.contactPhone}
-              onChange={(event) => setEdit({ ...edit, contactPhone: event.target.value })}
+              onChange={(contactPhone) => setEdit({ ...edit, contactPhone })}
+              defaultCountry={edit.country}
+              placeholder="e.g. 300 1234567"
             />
           </label>
           <label className="text-xs">
@@ -819,6 +825,7 @@ function LeadDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={edit.clientLinkedin}
               onChange={(event) => setEdit({ ...edit, clientLinkedin: event.target.value })}
+              placeholder="https://www.linkedin.com/in/..."
             />
           </label>
           <label className="text-xs">
@@ -857,6 +864,7 @@ function LeadDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={edit.estimatedValue}
               onChange={(event) => setEdit({ ...edit, estimatedValue: event.target.value })}
+              placeholder="e.g. 25000"
             />
           </label>
           <label className="text-xs">
@@ -879,6 +887,7 @@ function LeadDetail() {
             className="mt-1 w-full rounded-md border bg-background p-3 text-sm"
             value={edit.description}
             onChange={(event) => setEdit({ ...edit, description: event.target.value })}
+            placeholder="Describe the opportunity, relationship, stakeholders, and timing."
           />
         </label>
       </FormDialog>
@@ -908,6 +917,7 @@ function LeadDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={call.duration}
               onChange={(e) => setCall({ ...call, duration: e.target.value })}
+              placeholder="e.g. 30"
             />
           </label>
           <label className="text-xs col-span-2">
@@ -916,6 +926,7 @@ function LeadDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={call.attendees}
               onChange={(e) => setCall({ ...call, attendees: e.target.value })}
+              placeholder="Names of GoAccelovate attendees"
             />
           </label>
           <label className="text-xs col-span-2">
@@ -924,6 +935,7 @@ function LeadDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={call.clientAttendees}
               onChange={(e) => setCall({ ...call, clientAttendees: e.target.value })}
+              placeholder="Names and roles of client attendees"
             />
           </label>
           <label className="text-xs col-span-2 flex items-center gap-2">
@@ -941,6 +953,7 @@ function LeadDetail() {
               className="mt-1 w-full rounded-md border bg-background p-2 text-sm"
               value={call.summary}
               onChange={(e) => setCall({ ...call, summary: e.target.value })}
+              placeholder="Summarize the discussion and client needs"
             />
           </label>
           <label className="text-xs col-span-2">
@@ -950,6 +963,7 @@ function LeadDetail() {
               className="mt-1 w-full rounded-md border bg-background p-2 text-sm"
               value={call.outcomes}
               onChange={(e) => setCall({ ...call, outcomes: e.target.value })}
+              placeholder="Key decisions or outcomes"
             />
           </label>
           <label className="text-xs col-span-2">
@@ -959,6 +973,7 @@ function LeadDetail() {
               className="mt-1 w-full rounded-md border bg-background p-2 text-sm"
               value={call.nextSteps}
               onChange={(e) => setCall({ ...call, nextSteps: e.target.value })}
+              placeholder="Owners, actions, and deadlines"
             />
           </label>
           <label className="text-xs col-span-2">
@@ -967,6 +982,7 @@ function LeadDetail() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={call.attachmentName}
               onChange={(e) => setCall({ ...call, attachmentName: e.target.value })}
+              placeholder="https://..."
             />
           </label>
           <label className="text-xs col-span-2">
@@ -1016,6 +1032,7 @@ function LeadDetail() {
             className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
             value={confirmedValue}
             onChange={(e) => setConfirmedValue(e.target.value)}
+            placeholder="e.g. 25000"
           />
         </label>
         <p className="text-xs text-muted-foreground">
@@ -1059,6 +1076,7 @@ function LeadDetail() {
             className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
             value={estimatedValue}
             onChange={(event) => setEstimatedValue(event.target.value)}
+            placeholder="e.g. 25000"
           />
         </label>
       </FormDialog>

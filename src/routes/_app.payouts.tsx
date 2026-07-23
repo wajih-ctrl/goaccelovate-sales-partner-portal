@@ -8,6 +8,14 @@ import { fmtCurrency } from "@/lib/domain";
 import { toast } from "sonner";
 import { useState } from "react";
 import { ReasonDialog, FormDialog } from "@/components/common/dialogs";
+import { MoreHorizontal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/_app/payouts")({ component: Payouts });
 
@@ -98,41 +106,69 @@ function Payouts() {
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {p.paidDate ? new Date(p.paidDate).toLocaleDateString() : "—"}
                       </td>
-                      <td className="px-4 py-3 text-right space-x-1">
-                        <Button size="sm" variant="ghost" onClick={() => setViewId(p.id)}>
-                          View
-                        </Button>
-                        {canReview && p.status === "Pending" && (
-                          <>
-                            <Button
-                              size="sm"
-                              disabled={processingId === p.id}
-                              onClick={async () => {
-                                setProcessingId(p.id);
-                                try {
-                                  const approved = await approvePayout(p.id, user!.name);
-                                  if (approved) toast.success("Payout request approved");
-                                } finally {
-                                  setProcessingId(null);
-                                }
-                              }}
-                            >
-                              {processingId === p.id ? "Approving..." : "Approve"}
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => setRejectId(p.id)}>
-                              Reject
-                            </Button>
-                          </>
-                        )}
-                        {canReview && p.status === "Approved" && (
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setPayId(p.id);
-                              setPay((current) => ({ ...current, amount: String(p.amount) }));
-                            }}
-                          >
-                            Record payment
+                      <td className="px-4 py-3 text-right">
+                        {canReview ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                disabled={processingId === p.id}
+                                title="Payout actions"
+                              >
+                                <MoreHorizontal />
+                                <span className="sr-only">Payout actions</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => setViewId(p.id)}>
+                                View details
+                              </DropdownMenuItem>
+                              {p.status === "Pending" && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={async () => {
+                                      setProcessingId(p.id);
+                                      try {
+                                        const approved = await approvePayout(p.id, user!.name);
+                                        if (approved) toast.success("Payout request approved");
+                                      } finally {
+                                        setProcessingId(null);
+                                      }
+                                    }}
+                                  >
+                                    Approve request
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive"
+                                    onClick={() => setRejectId(p.id)}
+                                  >
+                                    Reject request
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              {p.status === "Approved" && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setPayId(p.id);
+                                      setPay((current) => ({
+                                        ...current,
+                                        amount: String(p.amount),
+                                      }));
+                                    }}
+                                  >
+                                    Record external payment
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : (
+                          <Button size="sm" variant="ghost" onClick={() => setViewId(p.id)}>
+                            View
                           </Button>
                         )}
                       </td>
@@ -227,6 +263,7 @@ function Payouts() {
             className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
             value={pay.amount}
             onChange={(e) => setPay({ ...pay, amount: e.target.value })}
+            placeholder="e.g. 1000.00"
           />
         </label>
         <label className="text-xs">

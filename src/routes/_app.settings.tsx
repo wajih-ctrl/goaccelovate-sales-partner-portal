@@ -104,6 +104,7 @@ function Settings() {
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={form.defaultRate}
               onChange={(e) => upd("defaultRate", Number(e.target.value))}
+              placeholder="10"
             />
           </Row>
           <Row label="Payout window (days)">
@@ -112,6 +113,7 @@ function Settings() {
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={form.payoutWindow}
               onChange={(e) => upd("payoutWindow", Number(e.target.value))}
+              placeholder="30"
             />
           </Row>
           <Row label="Default currency">
@@ -130,6 +132,7 @@ function Settings() {
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={form.currencies}
               onChange={(e) => upd("currencies", e.target.value)}
+              placeholder="USD, EUR, GBP"
             />
           </Row>
         </Card>
@@ -148,6 +151,7 @@ function Settings() {
               onChange={(event) =>
                 upd("announcementAttachmentMaxBytes", Number(event.target.value) * 1024 * 1024)
               }
+              placeholder="2"
             />
           </Row>
           <Row label="Welcome introduction video URL">
@@ -156,6 +160,7 @@ function Settings() {
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={form.welcomeIntroVideoUrl}
               onChange={(event) => upd("welcomeIntroVideoUrl", event.target.value)}
+              placeholder="https://youtu.be/..."
             />
           </Row>
         </Card>
@@ -170,6 +175,7 @@ function Settings() {
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={form.staleThreshold}
               onChange={(e) => upd("staleThreshold", Number(e.target.value))}
+              placeholder="14"
             />
           </Row>
           <Row label="Pipeline stage labels">
@@ -177,6 +183,7 @@ function Settings() {
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={form.pipelineLabels}
               onChange={(e) => upd("pipelineLabels", e.target.value)}
+              placeholder="Identified Opportunity, Outreach Started, ..."
             />
           </Row>
           <Row label="Industry / sector options">
@@ -184,6 +191,7 @@ function Settings() {
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={form.industries}
               onChange={(e) => upd("industries", e.target.value)}
+              placeholder="Technology, Financial Services, Healthcare"
             />
           </Row>
         </Card>
@@ -198,6 +206,7 @@ function Settings() {
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={form.invitationExpiry}
               onChange={(e) => upd("invitationExpiry", Number(e.target.value))}
+              placeholder="72"
             />
           </Row>
           <Row label="Onboarding checklist steps">
@@ -206,6 +215,7 @@ function Settings() {
               className="w-full rounded-md border bg-background p-3 text-sm"
               value={form.onboardingSteps}
               onChange={(e) => upd("onboardingSteps", e.target.value)}
+              placeholder="Agreement signed, NDA signed, Profile completed, Welcome kit, First lead"
             />
           </Row>
         </Card>

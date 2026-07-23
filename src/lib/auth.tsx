@@ -28,6 +28,7 @@ interface AuthCtx {
   signAgreementDocument: (
     documentType: "Agreement" | "NDA",
     legalName: string,
+    signature?: { path: string; fileName: string },
   ) => Promise<AuthResult>;
   validateAccount: () => Promise<boolean>;
   logout: () => Promise<void>;
@@ -369,6 +370,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signAgreementDocument: AuthCtx["signAgreementDocument"] = async (
     documentType,
     legalName,
+    signature,
   ) => {
     if (!supabase || !user) return { error: "You must be signed in to sign this document." };
     const { data, error } = await (supabase as any).rpc("accept_partner_agreement_document", {
@@ -376,6 +378,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signer_name: legalName,
       signer_email: user.email,
       browser_user_agent: typeof navigator === "undefined" ? null : navigator.userAgent,
+      uploaded_signature_path: signature?.path || null,
+      uploaded_signature_file_name: signature?.fileName || null,
     });
     if (error) return { error: error.message };
     const agreementsComplete = Boolean(data);
