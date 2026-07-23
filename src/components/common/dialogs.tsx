@@ -109,7 +109,7 @@ export function FormDialog({
         </DialogHeader>
         <div
           data-form-dialog-body
-          className="scrollbar-hidden min-h-0 space-y-5 overflow-y-auto py-1 pr-1"
+          className="scrollbar-hidden flex min-h-0 flex-col gap-4 overflow-y-auto py-1 pr-1"
         >
           {children}
         </div>

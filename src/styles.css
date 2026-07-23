@@ -228,13 +228,29 @@
   line-height: 1.4;
 }
 
+[data-form-dialog-body]
+  label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"])),
+[data-form-dialog-body] label:has(> select),
+[data-form-dialog-body] label:has(> textarea),
+[data-form-dialog-body] label:has(> .phone-input-container),
+[role="dialog"] label:has(> input:not([type="checkbox"]):not([type="radio"]):not([type="file"])),
+[role="dialog"] label:has(> select),
+[role="dialog"] label:has(> textarea),
+[role="dialog"] label:has(> .phone-input-container) {
+  display: block;
+}
+
+[data-form-dialog-body] > .grid {
+  row-gap: 1rem;
+}
+
 [data-form-dialog-body] label > input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 [data-form-dialog-body] label > select,
 [data-form-dialog-body] label > textarea,
 [role="dialog"] label > input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 [role="dialog"] label > select,
 [role="dialog"] label > textarea {
-  margin-top: 0.625rem !important;
+  margin-top: 0.5rem !important;
 }
 
 .phone-input-container {
