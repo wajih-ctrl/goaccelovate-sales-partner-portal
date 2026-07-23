@@ -1,5 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- New agreement RPCs are introduced by the pending migration. */
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Role, User } from "./domain";
 import { getAuthRedirectUrl, isSupabaseConfigured, supabase } from "./supabase";
 
@@ -73,12 +81,47 @@ function samePortalUser(current: User | null, next: User) {
   );
 }
 
+const DEFINITIVE_AUTH_ERROR_CODES = new Set([
+  "bad_jwt",
+  "no_authorization",
+  "user_not_found",
+  "session_not_found",
+  "session_expired",
+  "refresh_token_not_found",
+  "refresh_token_already_used",
+  "user_banned",
+]);
+
+function isDefinitiveAuthFailure(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const authError = error as { code?: string; name?: string; status?: number };
+  return (
+    authError.status === 401 ||
+    authError.name === "AuthSessionMissingError" ||
+    Boolean(authError.code && DEFINITIVE_AUTH_ERROR_CODES.has(authError.code))
+  );
+}
+
 async function loadSupabaseUser(verifyRemote = false): Promise<User | null> {
   if (!supabase) return null;
 
-  const authUser = verifyRemote
-    ? (await supabase.auth.getUser()).data.user
-    : (await supabase.auth.getSession()).data.session?.user;
+  let authUser;
+  if (verifyRemote) {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) {
+      if (isDefinitiveAuthFailure(error)) {
+        await supabase.auth.signOut({ scope: "local" });
+        return null;
+      }
+      throw error;
+    }
+    authUser = data.user;
+  } else {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    authUser = data.session?.user;
+  }
+
   if (!authUser) return null;
   const { data: profile, error } = await supabase
     .from("profiles")
@@ -113,28 +156,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const [authMode, setAuthMode] = useState<AuthCtx["authMode"]>(null);
+  const validationPromiseRef = useRef<Promise<boolean> | null>(null);
 
-  const validateAccount = useCallback(async () => {
-    if (!supabase) return false;
-    try {
-      const nextUser = await loadSupabaseUser(true);
-      if (!nextUser) {
-        await supabase.auth.signOut({ scope: "local" });
-        setUser(null);
-        setAuthMode(null);
-        return false;
+  const validateAccount = useCallback(() => {
+    if (!supabase) return Promise.resolve(false);
+
+    if (validationPromiseRef.current) return validationPromiseRef.current;
+
+    const validation = (async () => {
+      try {
+        const nextUser = await loadSupabaseUser(true);
+        if (!nextUser) {
+          setUser(null);
+          setAuthMode(null);
+          return false;
+        }
+        setUser((current) => (samePortalUser(current, nextUser) ? current : nextUser));
+        setAuthMode("supabase");
+        return true;
+      } catch (error) {
+        console.warn("Portal account validation was deferred", error);
+        return true;
       }
-      setUser((current) => (samePortalUser(current, nextUser) ? current : nextUser));
-      setAuthMode("supabase");
-      return true;
-    } catch (error) {
-      console.error("Unable to revalidate portal account", error);
-      const { data } = await supabase.auth.getSession();
-      if (data.session) return true;
-      setUser(null);
-      setAuthMode(null);
-      return false;
-    }
+    })();
+    validationPromiseRef.current = validation;
+    const clearValidation = () => {
+      if (validationPromiseRef.current === validation) validationPromiseRef.current = null;
+    };
+    void validation.then(clearValidation, clearValidation);
+    return validation;
   }, []);
 
   useEffect(() => {
@@ -159,24 +209,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     boot();
 
-    const { data: authListener } = supabase?.auth.onAuthStateChange((_event, session) => {
+    let authEventSequence = 0;
+    const { data: authListener } = supabase?.auth.onAuthStateChange((event, session) => {
+      const eventSequence = ++authEventSequence;
       if (!session?.user) {
-        setUser(null);
-        setAuthMode(null);
+        if (event === "SIGNED_OUT" || event === "INITIAL_SESSION") {
+          setUser(null);
+          setAuthMode(null);
+        }
         return;
       }
 
-      loadSupabaseUser()
-        .then((nextUser) => {
-          if (nextUser) {
-            setUser(nextUser);
-            setAuthMode("supabase");
-          } else {
-            setUser(null);
-            setAuthMode(null);
-          }
-        })
-        .catch((error) => console.error(error));
+      window.setTimeout(() => {
+        if (cancelled || eventSequence !== authEventSequence) return;
+        loadSupabaseUser()
+          .then((nextUser) => {
+            if (cancelled || eventSequence !== authEventSequence) return;
+            if (nextUser) {
+              setUser((current) => (samePortalUser(current, nextUser) ? current : nextUser));
+              setAuthMode("supabase");
+            } else {
+              setUser(null);
+              setAuthMode(null);
+            }
+          })
+          .catch((error) => console.warn("Unable to refresh the portal profile", error));
+      }, 0);
     }) || { data: { subscription: null } };
 
     return () => {
@@ -196,7 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") verify();
     };
-    const interval = window.setInterval(verify, 10_000);
+    const interval = window.setInterval(verify, 60_000);
     window.addEventListener("focus", verify);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
