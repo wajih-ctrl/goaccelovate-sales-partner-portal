@@ -351,22 +351,25 @@ function LeadDetail() {
               <div className="mt-1 text-xl font-semibold">
                 {fmtCurrency(lead.estimatedValue, lead.currency)}
               </div>
-              {isAdmin && isCommercialStage(lead.stage, lead.previousStage) && (
-                <Button
-                  className="mt-2"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setEstimatedValue(String(lead.estimatedValue));
-                    setShowEstimatedValue(true);
-                  }}
-                >
-                  Update commercial value
-                </Button>
-              )}
-              {lead.confirmedValue && isAdmin && (
-                <div className="text-xs text-success">
-                  Confirmed: {fmtCurrency(lead.confirmedValue, lead.currency)}
+              {isAdmin && (
+                <div className="mt-3 flex flex-col items-start gap-2">
+                  {isCommercialStage(lead.stage, lead.previousStage) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setEstimatedValue(String(lead.estimatedValue));
+                        setShowEstimatedValue(true);
+                      }}
+                    >
+                      Update commercial value
+                    </Button>
+                  )}
+                  {lead.confirmedValue && (
+                    <div className="text-xs font-medium text-success">
+                      Confirmed: {fmtCurrency(lead.confirmedValue, lead.currency)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

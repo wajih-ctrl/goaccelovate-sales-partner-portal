@@ -56,16 +56,17 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
   return (
     <>
       <Card className="p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
             <h3 className="font-semibold">Deal payment summary</h3>
             <p className="mt-1 text-xs text-muted-foreground">
               Client payments are private to Admin and release commission by milestone.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row md:shrink-0">
             {(advanceAllowed || advanceRecorded) && (
               <Button
+                className="w-full whitespace-nowrap sm:w-auto"
                 size="sm"
                 variant="outline"
                 disabled={!advanceAllowed}
@@ -75,7 +76,12 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
                 {advanceRecorded ? "Advance recorded" : "Record advance"}
               </Button>
             )}
-            <Button size="sm" disabled={!finalAllowed} onClick={() => openPayment("Final")}>
+            <Button
+              className="w-full whitespace-nowrap sm:w-auto"
+              size="sm"
+              disabled={!finalAllowed}
+              onClick={() => openPayment("Final")}
+            >
               <CheckCircle2 className="mr-2 h-4 w-4" />
               {finalRecorded ? "Final recorded" : "Record final"}
             </Button>
