@@ -667,6 +667,18 @@ try {
   );
 
   await resetLead("Final Payment Clearance");
+  await expectError(
+    admin.rpc("record_client_payment_and_eligibility", {
+      target_lead: lead.id,
+      payment_amount: 50,
+      payment_date: new Date().toISOString().slice(0, 10),
+      payment_reference: `ADV-FINAL-STAGE-${stamp}`,
+      payment_method: "Wire Transfer",
+      payment_type: "Advance",
+      payment_notes: null,
+    }),
+    "Advance payment at Final Payment Clearance denied",
+  );
   await must(
     admin.rpc("record_client_payment_and_eligibility", {
       target_lead: lead.id,
@@ -825,6 +837,28 @@ try {
   if (!adminNotifications.some((notification) => notification.title === "New payout request")) {
     throw new Error("Missing Admin notification: New payout request");
   }
+
+  const returnedToAdvance = await must(
+    admin.rpc("update_lead_stage_secure", {
+      target_lead: lead.id,
+      target_stage: "Advance Confirmed",
+      change_reason: "Client requested a revised advance cycle",
+    }),
+    "Return deal to Advance Confirmed",
+  );
+  await expectValue(Number(returnedToAdvance.payment_cycle), 1, "New advance payment cycle");
+  await must(
+    admin.rpc("record_client_payment_and_eligibility", {
+      target_lead: lead.id,
+      payment_amount: 50,
+      payment_date: new Date().toISOString().slice(0, 10),
+      payment_reference: `ADV-CYCLE-2-${stamp}`,
+      payment_method: "Wire Transfer",
+      payment_type: "Advance",
+      payment_notes: "New advance after returning to Advance Confirmed",
+    }),
+    "Record advance after returning to Advance Confirmed",
+  );
 
   console.log("Pipeline and commercial workflow verification passed");
 } finally {

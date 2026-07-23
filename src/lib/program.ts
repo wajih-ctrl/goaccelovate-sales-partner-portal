@@ -41,16 +41,7 @@ export const ADMIN_CONTROLLED_STAGES: LeadStage[] = [
   "Closed Won",
 ];
 
-export const ADVANCE_PAYMENT_STAGES: LeadStage[] = [
-  "Advance Confirmed",
-  "Sent to Product",
-  "Done by Product",
-  "Client Review",
-  "Under Revisions",
-  "Final Payment Clearance",
-  "Final Handoff",
-  "Closed Won",
-];
+export const ADVANCE_PAYMENT_STAGES: LeadStage[] = ["Advance Confirmed"];
 
 export const FINAL_PAYMENT_STAGES: LeadStage[] = [
   "Final Payment Clearance",

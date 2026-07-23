@@ -64,15 +64,17 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!advanceAllowed}
-              onClick={() => openPayment("Advance")}
-            >
-              <Banknote className="mr-2 h-4 w-4" />
-              {advanceRecorded ? "Advance recorded" : "Record advance"}
-            </Button>
+            {(advanceAllowed || advanceRecorded) && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!advanceAllowed}
+                onClick={() => openPayment("Advance")}
+              >
+                <Banknote className="mr-2 h-4 w-4" />
+                {advanceRecorded ? "Advance recorded" : "Record advance"}
+              </Button>
+            )}
             <Button size="sm" disabled={!finalAllowed} onClick={() => openPayment("Final")}>
               <CheckCircle2 className="mr-2 h-4 w-4" />
               {finalRecorded ? "Final recorded" : "Record final"}
@@ -101,7 +103,7 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
               : advanceRecorded
                 ? "Advance payment recorded. Final payment unlocks at Final Payment Clearance."
                 : finalAllowed
-                  ? "Advance and final payment milestones are available at this stage."
+                  ? "Record the final payment for this payment cycle."
                   : advanceAllowed
                     ? "Advance payment is available. Final payment unlocks at Final Payment Clearance."
                     : "Advance payment unlocks when the deal reaches Advance Confirmed."}

@@ -16,24 +16,45 @@ export const Route = createFileRoute("/_app/client-payments")({ component: Clien
 function ClientPayments() {
   const { user } = useAuth();
   const { leads, clientPayments, recordClientPayment } = useStore();
-  const eligibleLeads = leads.filter((lead) => canRecordClientPayment("Advance", lead.stage));
+  const availablePaymentTypes = (leadId: string) => {
+    const lead = leads.find((item) => item.id === leadId);
+    if (!lead) return [];
+    const currentCycle = lead.paymentCycle || 0;
+    const recordedTypes = new Set(
+      clientPayments
+        .filter(
+          (payment) => payment.leadId === lead.id && (payment.paymentCycle || 0) === currentCycle,
+        )
+        .map((payment) => payment.paymentType),
+    );
+    return (["Advance", "Final"] as const).filter(
+      (paymentType) =>
+        canRecordClientPayment(paymentType, lead.stage) && !recordedTypes.has(paymentType),
+    );
+  };
+  const eligibleLeads = leads.filter((lead) => availablePaymentTypes(lead.id).length > 0);
   const paymentSummaryLeads = leads.filter(
     (lead) =>
       canRecordClientPayment("Advance", lead.stage) ||
+      canRecordClientPayment("Final", lead.stage) ||
       clientPayments.some((payment) => payment.leadId === lead.id),
   );
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const emptyForm = (paymentType: "Advance" | "Final" = "Advance") => ({
-    leadId: eligibleLeads.find((lead) => canRecordClientPayment(paymentType, lead.stage))?.id || "",
-    paymentType,
-    amount: "",
-    date: new Date().toISOString().slice(0, 10),
-    reference: "",
-    method: "Wire Transfer",
-    notes: "",
-  });
+  const emptyForm = () => {
+    const leadId = eligibleLeads[0]?.id || "";
+    return {
+      leadId,
+      paymentType: (availablePaymentTypes(leadId)[0] || "Advance") as "Advance" | "Final",
+      amount: "",
+      date: new Date().toISOString().slice(0, 10),
+      reference: "",
+      method: "Wire Transfer",
+      notes: "",
+    };
+  };
   const [form, setForm] = useState(() => emptyForm());
+  const selectedPaymentTypes = availablePaymentTypes(form.leadId);
   if (user?.role === "partner") return <Navigate to="/access-denied" />;
 
   return (
@@ -167,7 +188,8 @@ function ClientPayments() {
           Number(form.amount) > 0 &&
           !!form.reference.trim() &&
           !!form.method.trim() &&
-          !!form.date
+          !!form.date &&
+          selectedPaymentTypes.includes(form.paymentType)
         }
         onSubmit={async () => {
           setSaving(true);
@@ -197,15 +219,23 @@ function ClientPayments() {
           <select
             className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
             value={form.leadId}
-            onChange={(e) => setForm({ ...form, leadId: e.target.value })}
+            onChange={(event) => {
+              const leadId = event.target.value;
+              const paymentTypes = availablePaymentTypes(leadId);
+              setForm({
+                ...form,
+                leadId,
+                paymentType: paymentTypes.includes(form.paymentType)
+                  ? form.paymentType
+                  : paymentTypes[0] || "Advance",
+              });
+            }}
           >
-            {eligibleLeads
-              .filter((lead) => canRecordClientPayment(form.paymentType, lead.stage))
-              .map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.company}
-                </option>
-              ))}
+            {eligibleLeads.map((lead) => (
+              <option key={lead.id} value={lead.id}>
+                {lead.company}
+              </option>
+            ))}
           </select>
         </label>
         <label className="text-xs">
@@ -215,18 +245,12 @@ function ClientPayments() {
             value={form.paymentType}
             onChange={(event) => {
               const paymentType = event.target.value as "Advance" | "Final";
-              const nextLead = eligibleLeads.find((lead) =>
-                canRecordClientPayment(paymentType, lead.stage),
-              );
-              setForm({
-                ...form,
-                paymentType,
-                leadId: nextLead?.id || "",
-              });
+              setForm({ ...form, paymentType });
             }}
           >
-            <option>Advance</option>
-            <option>Final</option>
+            {selectedPaymentTypes.map((paymentType) => (
+              <option key={paymentType}>{paymentType}</option>
+            ))}
           </select>
         </label>
         <div className="grid grid-cols-2 gap-2">
