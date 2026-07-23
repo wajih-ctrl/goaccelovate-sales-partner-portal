@@ -116,11 +116,17 @@ export interface ClientPayment {
   leadId: string;
   amount: number;
   date: string;
+  time?: string;
   reference: string;
   method: string;
   notes?: string;
   paymentType?: "Advance" | "Final";
   paymentCycle?: number;
+  receiptName?: string;
+  receiptBucket?: string;
+  receiptPath?: string;
+  receiptType?: string;
+  receiptSize?: number;
 }
 
 export interface DiscoveryCall {

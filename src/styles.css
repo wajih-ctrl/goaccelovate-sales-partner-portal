@@ -237,6 +237,26 @@
   margin-top: 0.625rem !important;
 }
 
+.phone-input-container {
+  container-name: phone-input;
+  container-type: inline-size;
+}
+
+.phone-input-grid {
+  grid-template-columns: minmax(8rem, 9rem) minmax(9rem, 1fr);
+}
+
+select[data-phone-country-code] {
+  padding-right: 2.25rem !important;
+  background-position: right 0.625rem center;
+}
+
+@container phone-input (max-width: 19rem) {
+  .phone-input-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @utility shadow-card {
   box-shadow: var(--shadow-card);
 }

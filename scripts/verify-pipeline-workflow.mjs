@@ -33,7 +33,7 @@ const service = createClient(url, serviceKey, {
 const stamp = `${Date.now()}-${randomBytes(3).toString("hex")}`;
 const password = `Flow!${randomBytes(18).toString("base64url")}9a`;
 const createdUserIds = [];
-const seeded = { payoutIds: [], extraLeadIds: [] };
+const seeded = { payoutIds: [], extraLeadIds: [], paymentReceiptPaths: [] };
 
 async function must(promise, label) {
   const result = await promise;
@@ -125,6 +125,9 @@ async function resetLead(stage = "Identified Opportunity", previousStage = null)
 }
 
 async function cleanup() {
+  if (seeded.paymentReceiptPaths.length) {
+    await service.storage.from("payment-receipts").remove(seeded.paymentReceiptPaths);
+  }
   if (seeded.invitationId) {
     await service.from("invitations").delete().eq("id", seeded.invitationId);
   }
@@ -495,6 +498,7 @@ try {
       target_lead: lead.id,
       payment_amount: 200,
       payment_date: new Date().toISOString().slice(0, 10),
+      payment_time: "09:30",
       payment_reference: `EARLY-${stamp}`,
       payment_method: "Wire Transfer",
       payment_type: "Advance",
@@ -503,18 +507,58 @@ try {
     "Advance payment before milestone denied",
   );
   await resetLead("Advance Confirmed");
+  const paymentReceiptPath = `${adminAccount.id}/${lead.id}/${stamp}-receipt.png`;
+  const paymentReceipt = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "base64",
+  );
+  await must(
+    admin.storage.from("payment-receipts").upload(paymentReceiptPath, paymentReceipt, {
+      contentType: "image/png",
+    }),
+    "Upload advance payment receipt",
+  );
+  seeded.paymentReceiptPaths.push(paymentReceiptPath);
   await must(
     admin.rpc("record_client_payment_and_eligibility", {
       target_lead: lead.id,
       payment_amount: 200,
       payment_date: new Date().toISOString().slice(0, 10),
+      payment_time: "09:30",
       payment_reference: `ADV-${stamp}`,
       payment_method: "Wire Transfer",
       payment_type: "Advance",
       payment_notes: "Live verification",
+      receipt_name: "advance-receipt.png",
+      receipt_bucket: "payment-receipts",
+      receipt_path: paymentReceiptPath,
+      receipt_type: "image/png",
+      receipt_size: paymentReceipt.byteLength,
     }),
     "Record advance payment",
   );
+  const savedPayment = await must(
+    admin
+      .from("client_payments")
+      .select("received_time,receipt_name,receipt_bucket,receipt_path,receipt_type,receipt_size")
+      .eq("lead_id", lead.id)
+      .eq("payment_type", "Advance")
+      .single(),
+    "Read advance payment receipt metadata",
+  );
+  await expectValue(savedPayment.received_time, "09:30:00", "Payment receipt time");
+  await expectValue(savedPayment.receipt_name, "advance-receipt.png", "Payment receipt name");
+  await expectValue(savedPayment.receipt_path, paymentReceiptPath, "Payment receipt path");
+  await must(
+    admin.storage.from("payment-receipts").download(paymentReceiptPath),
+    "Admin downloads payment receipt",
+  );
+  const partnerReceipt = await partnerClient.storage
+    .from("payment-receipts")
+    .download(paymentReceiptPath);
+  if (!partnerReceipt.error) {
+    throw new Error("Partner payment receipt download unexpectedly succeeded");
+  }
   let commission = await must(
     service.from("commissions").select("*").eq("lead_id", lead.id).single(),
     "Read advance commission",
@@ -672,6 +716,7 @@ try {
       target_lead: lead.id,
       payment_amount: 50,
       payment_date: new Date().toISOString().slice(0, 10),
+      payment_time: "09:30",
       payment_reference: `ADV-FINAL-STAGE-${stamp}`,
       payment_method: "Wire Transfer",
       payment_type: "Advance",
@@ -684,6 +729,7 @@ try {
       target_lead: lead.id,
       payment_amount: 800,
       payment_date: new Date().toISOString().slice(0, 10),
+      payment_time: "09:30",
       payment_reference: `FINAL-${stamp}`,
       payment_method: "Wire Transfer",
       payment_type: "Final",
@@ -852,6 +898,7 @@ try {
       target_lead: lead.id,
       payment_amount: 50,
       payment_date: new Date().toISOString().slice(0, 10),
+      payment_time: "09:30",
       payment_reference: `ADV-CYCLE-2-${stamp}`,
       payment_method: "Wire Transfer",
       payment_type: "Advance",

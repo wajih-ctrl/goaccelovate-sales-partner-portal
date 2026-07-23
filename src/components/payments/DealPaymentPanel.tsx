@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Banknote, CheckCircle2 } from "lucide-react";
+import { Banknote, CheckCircle2, Download, FileUp } from "lucide-react";
 import { toast } from "sonner";
 
 import { FormDialog } from "@/components/common/dialogs";
@@ -15,12 +15,14 @@ function newPaymentForm() {
   return {
     amount: "",
     date: new Date().toISOString().slice(0, 10),
+    time: new Date().toTimeString().slice(0, 5),
     reference: "",
+    receiptFile: null as File | null,
   };
 }
 
 export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string }) {
-  const { clientPayments, commissions, recordClientPayment } = useStore();
+  const { clientPayments, commissions, recordClientPayment, downloadStoredFile } = useStore();
   const [paymentType, setPaymentType] = useState<PaymentType | null>(null);
   const [form, setForm] = useState(newPaymentForm);
   const payments = clientPayments.filter((payment) => payment.leadId === lead.id);
@@ -121,12 +123,14 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
 
         {payments.length > 0 && (
           <div className="responsive-table-scroll mt-4">
-            <table className="min-w-[620px] w-full whitespace-nowrap text-sm">
+            <table className="min-w-[820px] w-full whitespace-nowrap text-sm">
               <thead className="text-xs text-muted-foreground">
                 <tr className="border-b">
                   <th className="py-2 text-left">Type</th>
                   <th className="px-3 py-2 text-left">Date</th>
+                  <th className="px-3 py-2 text-left">Time</th>
                   <th className="px-3 py-2 text-left">Reference</th>
+                  <th className="px-3 py-2 text-left">Receipt</th>
                   <th className="py-2 text-right">Amount</th>
                 </tr>
               </thead>
@@ -135,7 +139,28 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
                   <tr key={payment.id} className="border-b last:border-0">
                     <td className="py-2">{payment.paymentType}</td>
                     <td className="px-3 py-2">{new Date(payment.date).toLocaleDateString()}</td>
+                    <td className="px-3 py-2">{payment.time || "—"}</td>
                     <td className="px-3 py-2">{payment.reference}</td>
+                    <td className="px-3 py-2">
+                      {payment.receiptBucket && payment.receiptPath && payment.receiptName ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            downloadStoredFile(
+                              payment.receiptBucket!,
+                              payment.receiptPath!,
+                              payment.receiptName!,
+                            )
+                          }
+                        >
+                          <Download className="mr-1 h-3.5 w-3.5" />
+                          Receipt
+                        </Button>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className="py-2 text-right font-medium">
                       {fmtCurrency(payment.amount, lead.currency)}
                     </td>
@@ -155,7 +180,12 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
         title={`Record ${paymentType?.toLowerCase() || "client"} payment`}
         description={`${lead.company} - ${lead.stage}`}
         submitLabel="Record payment"
-        canSubmit={Number(form.amount) > 0 && Boolean(form.date) && Boolean(form.reference.trim())}
+        canSubmit={
+          Number(form.amount) > 0 &&
+          Boolean(form.date) &&
+          Boolean(form.time) &&
+          Boolean(form.reference.trim())
+        }
         onSubmit={async () => {
           if (!paymentType) return;
           const saved = await recordClientPayment(
@@ -164,9 +194,11 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
               paymentType,
               amount: Number(form.amount),
               date: form.date,
+              time: form.time,
               reference: form.reference.trim(),
               method: "Not specified",
               notes: "",
+              receiptFile: form.receiptFile || undefined,
             },
             actor,
           );
@@ -176,7 +208,7 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
           setForm(newPaymentForm());
         }}
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="text-xs">
             Amount ({lead.currency})
             <input
@@ -198,6 +230,15 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
               onChange={(event) => setForm({ ...form, date: event.target.value })}
             />
           </label>
+          <label className="text-xs">
+            Time received
+            <input
+              type="time"
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={form.time}
+              onChange={(event) => setForm({ ...form, time: event.target.value })}
+            />
+          </label>
         </div>
         <label className="text-xs">
           Payment reference
@@ -207,6 +248,23 @@ export function DealPaymentPanel({ lead, actor }: { lead: Lead; actor: string })
             onChange={(event) => setForm({ ...form, reference: event.target.value })}
             placeholder="Invoice or bank reference"
           />
+        </label>
+        <label className="block text-xs">
+          Payment receipt (optional)
+          <span className="mt-2 flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-dashed bg-background px-3 py-2 text-sm">
+            <FileUp className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">
+              {form.receiptFile?.name || "Upload PDF, PNG, or JPG (max 10MB)"}
+            </span>
+            <input
+              type="file"
+              className="hidden"
+              accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+              onChange={(event) =>
+                setForm({ ...form, receiptFile: event.target.files?.[0] || null })
+              }
+            />
+          </span>
         </label>
         <div className="rounded-md border bg-accent/20 p-3 text-xs text-muted-foreground">
           {paymentType === "Advance"

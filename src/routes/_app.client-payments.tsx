@@ -7,7 +7,7 @@ import { useStore } from "@/lib/store";
 import { fmtCurrency } from "@/lib/domain";
 import { toast } from "sonner";
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Download, FileUp, Plus } from "lucide-react";
 import { FormDialog } from "@/components/common/dialogs";
 import { canRecordClientPayment } from "@/lib/program";
 
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_app/client-payments")({ component: Clien
 
 function ClientPayments() {
   const { user } = useAuth();
-  const { leads, clientPayments, recordClientPayment } = useStore();
+  const { leads, clientPayments, recordClientPayment, downloadStoredFile } = useStore();
   const availablePaymentTypes = (leadId: string) => {
     const lead = leads.find((item) => item.id === leadId);
     if (!lead) return [];
@@ -48,9 +48,11 @@ function ClientPayments() {
       paymentType: (availablePaymentTypes(leadId)[0] || "Advance") as "Advance" | "Final",
       amount: "",
       date: new Date().toISOString().slice(0, 10),
+      time: new Date().toTimeString().slice(0, 5),
       reference: "",
       method: "Wire Transfer",
       notes: "",
+      receiptFile: null as File | null,
     };
   };
   const [form, setForm] = useState(() => emptyForm());
@@ -124,15 +126,17 @@ function ClientPayments() {
         </Card>
         <Card className="shadow-card overflow-hidden">
           <div className="responsive-table-scroll">
-            <table className="min-w-[980px] w-full whitespace-nowrap text-sm">
+            <table className="min-w-[1160px] w-full whitespace-nowrap text-sm">
               <thead className="bg-accent/40 text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 text-left">Reference</th>
                   <th className="px-4 py-3 text-left">Deal</th>
                   <th className="px-4 py-3 text-left">Date</th>
+                  <th className="px-4 py-3 text-left">Time</th>
                   <th className="px-4 py-3 text-left">Type</th>
                   <th className="px-4 py-3 text-right">Amount</th>
                   <th className="px-4 py-3 text-left">Method</th>
+                  <th className="px-4 py-3 text-left">Receipt</th>
                   <th className="px-4 py-3 text-left">Notes</th>
                 </tr>
               </thead>
@@ -146,18 +150,39 @@ function ClientPayments() {
                       <td className="px-4 py-3 text-xs">
                         {new Date(cp.date).toLocaleDateString()}
                       </td>
+                      <td className="px-4 py-3 text-xs">{cp.time || "—"}</td>
                       <td className="px-4 py-3">{cp.paymentType || "—"}</td>
                       <td className="px-4 py-3 text-right font-semibold">
                         {fmtCurrency(cp.amount, lead?.currency)}
                       </td>
                       <td className="px-4 py-3">{cp.method}</td>
+                      <td className="px-4 py-3">
+                        {cp.receiptBucket && cp.receiptPath && cp.receiptName ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              downloadStoredFile(
+                                cp.receiptBucket!,
+                                cp.receiptPath!,
+                                cp.receiptName!,
+                              )
+                            }
+                          >
+                            <Download className="mr-1 h-3.5 w-3.5" />
+                            Receipt
+                          </Button>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{cp.notes}</td>
                     </tr>
                   );
                 })}
                 {clientPayments.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-10 text-center text-muted-foreground">
+                    <td colSpan={9} className="py-10 text-center text-muted-foreground">
                       No client payments recorded yet.
                     </td>
                   </tr>
@@ -189,6 +214,7 @@ function ClientPayments() {
           !!form.reference.trim() &&
           !!form.method.trim() &&
           !!form.date &&
+          !!form.time &&
           selectedPaymentTypes.includes(form.paymentType)
         }
         onSubmit={async () => {
@@ -198,10 +224,12 @@ function ClientPayments() {
               leadId: form.leadId,
               amount: Number(form.amount),
               date: form.date,
+              time: form.time,
               reference: form.reference,
               method: form.method,
               notes: form.notes,
               paymentType: form.paymentType,
+              receiptFile: form.receiptFile || undefined,
             },
             user!.name,
           );
@@ -253,7 +281,7 @@ function ClientPayments() {
             ))}
           </select>
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="text-xs">
             Amount
             <input
@@ -271,6 +299,15 @@ function ClientPayments() {
               className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={form.date}
               onChange={(e) => setForm({ ...form, date: e.target.value })}
+            />
+          </label>
+          <label className="text-xs">
+            Time received
+            <input
+              type="time"
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={form.time}
+              onChange={(e) => setForm({ ...form, time: e.target.value })}
             />
           </label>
         </div>
@@ -305,6 +342,23 @@ function ClientPayments() {
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
             placeholder="Optional internal context for this payment"
           />
+        </label>
+        <label className="block text-xs">
+          Payment receipt (optional)
+          <span className="mt-2 flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-dashed bg-background px-3 py-2 text-sm">
+            <FileUp className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">
+              {form.receiptFile?.name || "Upload PDF, PNG, or JPG (max 10MB)"}
+            </span>
+            <input
+              type="file"
+              className="hidden"
+              accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+              onChange={(event) =>
+                setForm({ ...form, receiptFile: event.target.files?.[0] || null })
+              }
+            />
+          </span>
         </label>
         <div className="rounded-md border bg-accent/20 p-3 text-xs text-muted-foreground">
           {saving

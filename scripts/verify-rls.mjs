@@ -162,6 +162,7 @@ async function main() {
   const leadViewPath = process.env.RLS_PARTNER_B_LEAD_VIEW_PATH;
   const leadDeletePath = process.env.RLS_PARTNER_B_LEAD_DELETE_PATH;
   const signaturePath = process.env.RLS_PARTNER_B_SIGNATURE_PATH;
+  const paymentReceiptPath = process.env.RLS_PAYMENT_RECEIPT_PATH;
   if (documentPath && privateDocumentPath && leadViewPath && leadDeletePath) {
     await expectStorageDenied(
       "Partner A cannot download Partner B document",
@@ -205,6 +206,16 @@ async function main() {
       await expectStorageSuccess(
         "Admin can review an uploaded partner signature",
         admin.storage.from("partner-signatures").download(signaturePath),
+      );
+    }
+    if (paymentReceiptPath) {
+      await expectStorageDenied(
+        "Partner cannot download a client payment receipt",
+        partnerA.storage.from("payment-receipts").download(paymentReceiptPath),
+      );
+      await expectStorageSuccess(
+        "Admin can download a client payment receipt",
+        admin.storage.from("payment-receipts").download(paymentReceiptPath),
       );
     }
   }

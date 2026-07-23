@@ -66,36 +66,39 @@ export function PhoneInput({
   };
 
   return (
-    <div className="mt-2 grid grid-cols-[minmax(7.5rem,9rem)_minmax(0,1fr)] gap-2">
-      <select
-        aria-label="Country calling code"
-        className="h-10 w-full rounded-md border bg-background pl-3 text-sm"
-        value={dialCode}
-        onChange={(event) => {
-          setDialCode(event.target.value);
-          update(event.target.value, parsed.number);
-        }}
-      >
-        {!uniqueOptions.some((option) => option.code === dialCode) && (
-          <option value={dialCode}>{dialCode}</option>
-        )}
-        {uniqueOptions.map((option) => (
-          <option key={`${option.country}-${option.code}`} value={option.code}>
-            {option.code} {option.country}
-          </option>
-        ))}
-      </select>
-      <input
-        id={id}
-        type="tel"
-        inputMode="tel"
-        autoComplete="tel-national"
-        className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-        value={parsed.number}
-        onChange={(event) => update(dialCode, event.target.value)}
-        placeholder={placeholder}
-        required={required}
-      />
+    <div className="phone-input-container mt-2">
+      <div className="phone-input-grid grid gap-2">
+        <select
+          data-phone-country-code
+          aria-label="Country calling code"
+          className="h-10 w-full rounded-md border bg-background pl-3 text-sm"
+          value={dialCode}
+          onChange={(event) => {
+            setDialCode(event.target.value);
+            update(event.target.value, parsed.number);
+          }}
+        >
+          {!uniqueOptions.some((option) => option.code === dialCode) && (
+            <option value={dialCode}>{dialCode}</option>
+          )}
+          {uniqueOptions.map((option) => (
+            <option key={`${option.country}-${option.code}`} value={option.code}>
+              {option.code} {option.country}
+            </option>
+          ))}
+        </select>
+        <input
+          id={id}
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel-national"
+          className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+          value={parsed.number}
+          onChange={(event) => update(dialCode, event.target.value)}
+          placeholder={placeholder}
+          required={required}
+        />
+      </div>
     </div>
   );
 }

@@ -182,7 +182,10 @@ interface AppActions {
   ) => Promise<boolean>;
   // Client payments
   recordClientPayment: (
-    payload: Omit<ClientPayment, "id"> & { triggerEligibility?: boolean },
+    payload: Omit<ClientPayment, "id"> & {
+      triggerEligibility?: boolean;
+      receiptFile?: File;
+    },
     actor: string,
   ) => Promise<boolean>;
   // Announcements
@@ -609,11 +612,17 @@ function mapClientPayment(row: any): ClientPayment {
     leadId: row.lead_id,
     amount: Number(row.amount_received || 0),
     date: row.received_date,
+    time: row.received_time || undefined,
     reference: row.payment_reference,
     method: row.payment_method,
     notes: row.notes || undefined,
     paymentType: row.payment_type || undefined,
     paymentCycle: Number(row.payment_cycle || 0),
+    receiptName: row.receipt_name || undefined,
+    receiptBucket: row.receipt_bucket || undefined,
+    receiptPath: row.receipt_path || undefined,
+    receiptType: row.receipt_type || undefined,
+    receiptSize: row.receipt_size == null ? undefined : Number(row.receipt_size),
   };
 }
 
@@ -2496,28 +2505,82 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const recordClientPayment: AppActions["recordClientPayment"] = useCallback(
     async (payload, actor) => {
+      if (payload.receiptFile) {
+        const validationError = validateUploadFile(
+          payload.receiptFile,
+          STORAGE_BUCKETS.paymentReceipts,
+        );
+        if (validationError) {
+          toast.error(validationError);
+          return false;
+        }
+      }
+
       if (realMode && supabase) {
-        const { error } = await (supabase as any).rpc("record_client_payment_and_eligibility", {
-          target_lead: payload.leadId,
-          payment_amount: payload.amount,
-          payment_date: payload.date,
-          payment_reference: payload.reference,
-          payment_method: payload.method,
-          payment_type: payload.paymentType,
-          payment_notes: payload.notes || null,
-        });
+        let receiptPath: string | undefined;
+        if (payload.receiptFile) {
+          receiptPath = buildStoragePath(user?.id, payload.leadId, payload.receiptFile);
+          const { error: uploadError } = await supabase.storage
+            .from(STORAGE_BUCKETS.paymentReceipts)
+            .upload(receiptPath, payload.receiptFile, {
+              contentType: payload.receiptFile.type,
+              upsert: false,
+            });
+          if (uploadError) {
+            handleWriteError(uploadError, "Payment receipt upload failed.");
+            return false;
+          }
+        }
+
+        const { data, error } = await (supabase as any).rpc(
+          "record_client_payment_and_eligibility",
+          {
+            target_lead: payload.leadId,
+            payment_amount: payload.amount,
+            payment_date: payload.date,
+            payment_time: payload.time || null,
+            payment_reference: payload.reference,
+            payment_method: payload.method,
+            payment_type: payload.paymentType,
+            payment_notes: payload.notes || null,
+            receipt_name: payload.receiptFile?.name || null,
+            receipt_bucket: receiptPath ? STORAGE_BUCKETS.paymentReceipts : null,
+            receipt_path: receiptPath || null,
+            receipt_type: payload.receiptFile?.type || null,
+            receipt_size: payload.receiptFile?.size || null,
+          },
+        );
         if (error) {
+          if (receiptPath) {
+            await supabase.storage.from(STORAGE_BUCKETS.paymentReceipts).remove([receiptPath]);
+          }
           handleWriteError(error, "Unable to record the client payment.");
           reloadAfterWrite();
           return false;
         }
+        if (data) {
+          setClientPayments((current) => [
+            mapClientPayment(data),
+            ...current.filter((payment) => payment.id !== data.id),
+          ]);
+        }
         reloadAfterWrite();
         return true;
       }
+      const { receiptFile, ...paymentPayload } = payload;
       const released = commissions.filter(
         (commission) => commission.leadId === payload.leadId && commission.state !== "Waived",
       );
-      setClientPayments((prev) => [{ ...payload, id: uid("CP") }, ...prev]);
+      setClientPayments((prev) => [
+        {
+          ...paymentPayload,
+          id: uid("CP"),
+          receiptName: receiptFile?.name,
+          receiptType: receiptFile?.type,
+          receiptSize: receiptFile?.size,
+        },
+        ...prev,
+      ]);
       if (released.length > 0) {
         setCommissions((prev) =>
           prev.map((commission) => {
@@ -2569,7 +2632,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       return true;
     },
-    [commissions, handleWriteError, realMode, reloadAfterWrite],
+    [commissions, handleWriteError, realMode, reloadAfterWrite, user?.id],
   );
 
   const publishAnnouncement: AppActions["publishAnnouncement"] = useCallback(

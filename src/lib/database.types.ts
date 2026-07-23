@@ -154,7 +154,15 @@ export type Database = {
           notes: string | null;
           payment_method: string;
           payment_reference: string;
+          payment_cycle: number;
+          payment_type: string;
+          receipt_bucket: string | null;
+          receipt_name: string | null;
+          receipt_path: string | null;
+          receipt_size: number | null;
+          receipt_type: string | null;
           received_date: string;
+          received_time: string | null;
           trigger_commission_eligibility: boolean;
         };
         Insert: {
@@ -166,7 +174,15 @@ export type Database = {
           notes?: string | null;
           payment_method: string;
           payment_reference: string;
+          payment_cycle?: number;
+          payment_type: string;
+          receipt_bucket?: string | null;
+          receipt_name?: string | null;
+          receipt_path?: string | null;
+          receipt_size?: number | null;
+          receipt_type?: string | null;
           received_date: string;
+          received_time?: string | null;
           trigger_commission_eligibility?: boolean;
         };
         Update: {
@@ -178,7 +194,15 @@ export type Database = {
           notes?: string | null;
           payment_method?: string;
           payment_reference?: string;
+          payment_cycle?: number;
+          payment_type?: string;
+          receipt_bucket?: string | null;
+          receipt_name?: string | null;
+          receipt_path?: string | null;
+          receipt_size?: number | null;
+          receipt_type?: string | null;
           received_date?: string;
+          received_time?: string | null;
           trigger_commission_eligibility?: boolean;
         };
         Relationships: [

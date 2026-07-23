@@ -3,6 +3,7 @@ export const STORAGE_BUCKETS = {
   partnerDocuments: "partner-documents",
   discoveryCallFiles: "discovery-call-files",
   announcementAttachments: "announcement-attachments",
+  paymentReceipts: "payment-receipts",
 } as const;
 
 type BucketId = (typeof STORAGE_BUCKETS)[keyof typeof STORAGE_BUCKETS];
@@ -12,6 +13,7 @@ const MAX_FILE_SIZE: Record<BucketId, number> = {
   "partner-documents": 50 * 1024 * 1024,
   "discovery-call-files": 100 * 1024 * 1024,
   "announcement-attachments": 2 * 1024 * 1024,
+  "payment-receipts": 10 * 1024 * 1024,
 };
 
 const ALLOWED_TYPES: Record<BucketId, Set<string>> = {
@@ -43,6 +45,7 @@ const ALLOWED_TYPES: Record<BucketId, Set<string>> = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ]),
+  "payment-receipts": new Set(["application/pdf", "image/png", "image/jpeg"]),
 };
 
 export function sanitizeFileName(name: string) {

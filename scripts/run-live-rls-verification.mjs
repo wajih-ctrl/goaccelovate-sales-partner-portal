@@ -44,6 +44,7 @@ const storageObjects = {
   "partner-documents": [],
   "lead-attachments": [],
   "partner-signatures": [],
+  "payment-receipts": [],
 };
 const seeded = {};
 
@@ -310,6 +311,7 @@ try {
   const leadViewPath = `${partnerBUser.id}/${leadB.id}/view.pdf`;
   const leadDeletePath = `${partnerBUser.id}/${leadB.id}/delete.pdf`;
   const signaturePath = `${partnerBUser.id}/agreement/${stamp}.png`;
+  const paymentReceiptPath = `${admin.id}/${leadB.id}/${stamp}-receipt.pdf`;
   for (const path of [documentPath, privateDocumentPath]) {
     await must(
       service.storage
@@ -341,6 +343,15 @@ try {
     "Upload partner signature",
   );
   storageObjects["partner-signatures"].push(signaturePath);
+  await must(
+    service.storage
+      .from("payment-receipts")
+      .upload(paymentReceiptPath, new TextEncoder().encode("%PDF-1.4 RLS payment receipt"), {
+        contentType: "application/pdf",
+      }),
+    "Upload payment receipt",
+  );
+  storageObjects["payment-receipts"].push(paymentReceiptPath);
   await must(
     service.from("partner_documents").insert([
       {
@@ -396,6 +407,7 @@ try {
       RLS_PARTNER_B_LEAD_VIEW_PATH: leadViewPath,
       RLS_PARTNER_B_LEAD_DELETE_PATH: leadDeletePath,
       RLS_PARTNER_B_SIGNATURE_PATH: signaturePath,
+      RLS_PAYMENT_RECEIPT_PATH: paymentReceiptPath,
     },
   });
   if (verification.stdout) process.stdout.write(verification.stdout);
