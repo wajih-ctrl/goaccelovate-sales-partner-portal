@@ -474,7 +474,9 @@ function LeadDetail() {
               </div>
             </Card>
 
-            <Card className="p-0 overflow-hidden">
+            <Card
+              className={`relative p-0 overflow-visible ${mentionPickerOpen ? "z-20" : "z-auto"}`}
+            >
               <Tabs defaultValue="timeline">
                 <TabsList className="m-3">
                   <TabsTrigger value="timeline">
