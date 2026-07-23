@@ -96,12 +96,12 @@ export function FormDialog({
   const [submitting, setSubmitting] = useState(false);
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
-        <div className="space-y-3">{children}</div>
+        <div className="-mr-2 min-h-0 space-y-3 overflow-y-auto pr-2">{children}</div>
         <DialogFooter>
           <Button variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
             Cancel

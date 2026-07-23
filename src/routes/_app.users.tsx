@@ -338,36 +338,36 @@ function UsersPage() {
           });
         }}
       >
-        <label className="text-xs">
-          Full name
-          <input
-            className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
-            value={invite.name}
-            onChange={(e) => setInvite({ ...invite, name: e.target.value })}
-          />
-        </label>
-        <label className="text-xs">
-          Email
-          <input
-            type="email"
-            className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
-            value={invite.email}
-            onChange={(e) => setInvite({ ...invite, email: e.target.value })}
-          />
-        </label>
-        <label className="text-xs">
-          Role
-          <select
-            className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
-            value={invite.role}
-            onChange={(e) => setInvite({ ...invite, role: e.target.value as InviteRole })}
-          >
-            <option value="partner">Sales Partner</option>
-            {isSuperAdmin && <option value="admin">Admin</option>}
-          </select>
-        </label>
-        {invite.role === "partner" && (
-          <>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="text-xs">
+            Full name
+            <input
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={invite.name}
+              onChange={(e) => setInvite({ ...invite, name: e.target.value })}
+            />
+          </label>
+          <label className="text-xs">
+            Email
+            <input
+              type="email"
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={invite.email}
+              onChange={(e) => setInvite({ ...invite, email: e.target.value })}
+            />
+          </label>
+          <label className="text-xs">
+            Role
+            <select
+              className="mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={invite.role}
+              onChange={(e) => setInvite({ ...invite, role: e.target.value as InviteRole })}
+            >
+              <option value="partner">Sales Partner</option>
+              {isSuperAdmin && <option value="admin">Admin</option>}
+            </select>
+          </label>
+          {invite.role === "partner" && (
             <label className="text-xs">
               Commission percentage
               <input
@@ -380,10 +380,14 @@ function UsersPage() {
                 onChange={(e) => setInvite({ ...invite, commissionRate: e.target.value })}
               />
             </label>
+          )}
+        </div>
+        {invite.role === "partner" && (
+          <>
             <label className="text-xs">
               Partner agreement text
               <textarea
-                rows={14}
+                rows={7}
                 className="mt-1 w-full rounded-md border bg-background p-3 font-mono text-xs leading-5"
                 value={invite.agreementText}
                 onChange={(e) => setInvite({ ...invite, agreementText: e.target.value })}
