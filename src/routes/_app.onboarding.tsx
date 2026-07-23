@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Agreement tables are introduced by the pending migration. */
-import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   CheckCircle2,
@@ -50,14 +50,10 @@ function youtubeEmbedUrl(value: string) {
 }
 
 function Onboarding() {
-  const { user, signRequiredAgreements } = useAuth();
+  const { user } = useAuth();
   const { onboarding, settings } = useStore();
-  const navigate = useNavigate();
   const [documents, setDocuments] = useState<AgreementDocument[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(true);
-  const [legalName, setLegalName] = useState(user?.name || "");
-  const [confirmed, setConfirmed] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [welcomeAcknowledged, setWelcomeAcknowledged] = useState(false);
   const [welcomeLoading, setWelcomeLoading] = useState(false);
 
@@ -103,15 +99,6 @@ function Onboarding() {
     documents.length >= 2 && documents.every((document) => document.content_url);
   const introductionVideoEmbed = youtubeEmbedUrl(settings.welcomeIntroVideoUrl);
 
-  const sign = async () => {
-    setLoading(true);
-    const result = await signRequiredAgreements(legalName.trim());
-    setLoading(false);
-    if (result.error) return toast.error(result.error);
-    toast.success("Agreements signed. Your portal access is now active.");
-    navigate({ to: "/dashboard", replace: true });
-  };
-
   const acknowledgeWelcomeKit = async () => {
     if (!supabase) return toast.error("Supabase is not configured.");
     setWelcomeLoading(true);
@@ -153,15 +140,27 @@ function Onboarding() {
                     key={document.id}
                     to="/legal/$type"
                     params={{ type: document.document_type === "Agreement" ? "agreement" : "nda" }}
-                    className="flex items-center justify-between rounded-md border p-3 text-sm hover:bg-accent/30"
+                    className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm hover:bg-accent/30"
                   >
-                    <span>
-                      <strong>{document.title}</strong>
+                    <span className="min-w-0">
+                      <strong className="block truncate">{document.title}</strong>
                       <span className="block text-xs text-muted-foreground">
                         {document.document_type} version {document.version}
                       </span>
                     </span>
-                    <FileText className="h-4 w-4" />
+                    <span className="flex shrink-0 items-center gap-2 text-xs font-medium">
+                      {status[document.document_type === "Agreement" ? "agreement" : "nda"] ? (
+                        <>
+                          <CheckCircle2 className="h-4 w-4 text-success" />
+                          Signed
+                        </>
+                      ) : (
+                        <>
+                          Review and sign
+                          <FileText className="h-4 w-4" />
+                        </>
+                      )}
+                    </span>
                   </Link>
                 ))}
               </div>
@@ -172,45 +171,10 @@ function Onboarding() {
               </div>
             )}
 
-            <div className="grid gap-3 sm:max-w-2xl sm:grid-cols-2">
-              <label className="block text-xs font-medium">
-                Electronic signature
-                <input
-                  className="mt-1 h-10 w-full rounded-md border bg-background px-3 font-serif text-base italic"
-                  value={legalName}
-                  onChange={(event) => setLegalName(event.target.value)}
-                  autoComplete="name"
-                />
-              </label>
-              <label className="block text-xs font-medium">
-                Signature date
-                <input
-                  type="date"
-                  className="mt-1 h-10 w-full rounded-md border bg-muted px-3 text-sm"
-                  value={new Date().toISOString().slice(0, 10)}
-                  readOnly
-                />
-              </label>
+            <div className="rounded-md border bg-accent/20 p-3 text-sm text-muted-foreground">
+              Open and sign each document individually. Pipeline and commission access unlocks
+              automatically after both the Agreement and NDA are signed.
             </div>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={confirmed}
-                onChange={(event) => setConfirmed(event.target.checked)}
-              />
-              <span>
-                I have reviewed and agree to the current Partner Agreement and NDA, and I consent to
-                use this electronic signature.
-              </span>
-            </label>
-            <Button
-              onClick={sign}
-              disabled={!documentsReady || !confirmed || !legalName.trim() || loading}
-            >
-              <FileSignature className="mr-2 h-4 w-4" />
-              {loading ? "Signing..." : "Sign Agreement and NDA"}
-            </Button>
           </Card>
         )}
 

@@ -6,6 +6,7 @@ import { getAuthRedirectUrl, isSupabaseConfigured, supabase } from "./supabase";
 interface AuthResult {
   error?: string;
   requiresAgreement?: boolean;
+  agreementsComplete?: boolean;
 }
 
 interface AuthCtx {
@@ -16,6 +17,10 @@ interface AuthCtx {
   resetPassword: (email: string) => Promise<AuthResult>;
   acceptInvitation: (payload: { fullName: string; password: string }) => Promise<AuthResult>;
   signRequiredAgreements: (legalName: string) => Promise<AuthResult>;
+  signAgreementDocument: (
+    documentType: "Agreement" | "NDA",
+    legalName: string,
+  ) => Promise<AuthResult>;
   validateAccount: () => Promise<boolean>;
   logout: () => Promise<void>;
 }
@@ -28,6 +33,7 @@ const Ctx = createContext<AuthCtx>({
   resetPassword: async () => ({}),
   acceptInvitation: async () => ({}),
   signRequiredAgreements: async () => ({}),
+  signAgreementDocument: async () => ({}),
   validateAccount: async () => false,
   logout: async () => {},
 });
@@ -302,6 +308,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {};
   };
 
+  const signAgreementDocument: AuthCtx["signAgreementDocument"] = async (
+    documentType,
+    legalName,
+  ) => {
+    if (!supabase || !user) return { error: "You must be signed in to sign this document." };
+    const { data, error } = await (supabase as any).rpc("accept_partner_agreement_document", {
+      target_document_type: documentType,
+      signer_name: legalName,
+      signer_email: user.email,
+      browser_user_agent: typeof navigator === "undefined" ? null : navigator.userAgent,
+    });
+    if (error) return { error: error.message };
+    const agreementsComplete = Boolean(data);
+    setUser((current) => (current ? { ...current, agreementsComplete } : current));
+    return { agreementsComplete };
+  };
+
   return (
     <Ctx.Provider
       value={{
@@ -312,6 +335,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         resetPassword,
         acceptInvitation,
         signRequiredAgreements,
+        signAgreementDocument,
         validateAccount,
         logout,
       }}

@@ -212,12 +212,46 @@ try {
     "Staff notification feed included another recipient's alert",
   );
 
-  const { error: agreementError } = await partnerClient.rpc("accept_required_partner_agreements", {
-    signer_name: "Agreement Gate Partner",
-    signer_email: partnerEmail,
-    browser_user_agent: "GoAccelovate agreement gate verification",
-  });
+  const { data: agreementComplete, error: agreementError } = await partnerClient.rpc(
+    "accept_partner_agreement_document",
+    {
+      target_document_type: "Agreement",
+      signer_name: "Agreement Gate Partner",
+      signer_email: partnerEmail,
+      browser_user_agent: "GoAccelovate individual Agreement verification",
+    },
+  );
   if (agreementError) throw agreementError;
+  assert(agreementComplete === false, "Agreement-only signature unexpectedly unlocked access");
+
+  const { data: accessAfterAgreement, error: accessAfterAgreementError } = await partnerClient.rpc(
+    "partner_has_program_access",
+  );
+  if (accessAfterAgreementError) throw accessAfterAgreementError;
+  assert(accessAfterAgreement === false, "Agreement-only partner received program access");
+
+  const { data: acceptanceAfterAgreement, error: acceptanceAfterAgreementError } = await service
+    .from("partner_agreement_acceptances")
+    .select("agreement_documents!inner(document_type)")
+    .eq("partner_id", ownPartnerId);
+  if (acceptanceAfterAgreementError) throw acceptanceAfterAgreementError;
+  assert(
+    acceptanceAfterAgreement.length === 1 &&
+      acceptanceAfterAgreement[0].agreement_documents.document_type === "Agreement",
+    "Agreement signature did not remain isolated to the Agreement",
+  );
+
+  const { data: ndaComplete, error: ndaError } = await partnerClient.rpc(
+    "accept_partner_agreement_document",
+    {
+      target_document_type: "NDA",
+      signer_name: "Agreement Gate Partner",
+      signer_email: partnerEmail,
+      browser_user_agent: "GoAccelovate individual NDA verification",
+    },
+  );
+  if (ndaError) throw ndaError;
+  assert(ndaComplete === true, "NDA signature did not complete both required documents");
 
   const { data: accessAfter, error: accessAfterError } = await partnerClient.rpc(
     "partner_has_program_access",
@@ -238,7 +272,8 @@ try {
   console.log("PASS: unsigned partner operational access was blocked");
   console.log("PASS: unsigned partner retained only their own notification");
   console.log("PASS: staff notification feed was recipient-scoped");
-  console.log("PASS: signing the active Agreement and NDA unlocked own operational data");
+  console.log("PASS: Agreement signed independently without unlocking operational data");
+  console.log("PASS: NDA signed independently and unlocked own operational data");
 } finally {
   await partnerClient.auth.signOut({ scope: "local" }).catch(() => undefined);
   await adminClient.auth.signOut({ scope: "local" }).catch(() => undefined);

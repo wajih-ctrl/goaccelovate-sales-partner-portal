@@ -2,7 +2,9 @@
 import { createFileRoute, Navigate, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Printer } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
+import { FormDialog } from "@/components/common/dialogs";
 import { PageContainer, PageHeader } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand/BrandLogo";
@@ -36,12 +38,16 @@ type InvitationAgreement = AgreementIssuer & {
 function LegalDocumentPage() {
   const { type } = Route.useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, signAgreementDocument } = useAuth();
   const { partners } = useStore();
+  const documentType = type === "nda" ? "NDA" : "Agreement";
   const [acceptance, setAcceptance] = useState<AgreementAcceptance | null>(null);
   const [issuer, setIssuer] = useState<AgreementIssuer | null>(null);
   const [invitationAgreement, setInvitationAgreement] = useState<InvitationAgreement | null>(null);
   const [documentLoading, setDocumentLoading] = useState(user?.role === "partner");
+  const [signOpen, setSignOpen] = useState(false);
+  const [signerName, setSignerName] = useState(user?.name || "");
+  const [signatureConfirmed, setSignatureConfirmed] = useState(false);
 
   useEffect(() => {
     if (!supabase || user?.role !== "partner" || !user.partnerId) {
@@ -50,7 +56,6 @@ function LegalDocumentPage() {
     }
 
     let cancelled = false;
-    const documentType = type === "nda" ? "NDA" : "Agreement";
     void Promise.all([
       (supabase as any)
         .from("partner_agreement_acceptances")
@@ -79,7 +84,7 @@ function LegalDocumentPage() {
     return () => {
       cancelled = true;
     };
-  }, [type, user?.partnerId, user?.role]);
+  }, [documentType, user?.partnerId, user?.role]);
 
   if (type !== "agreement" && type !== "nda") return <Navigate to="/onboarding" replace />;
 
@@ -126,9 +131,7 @@ function LegalDocumentPage() {
               {user?.role === "partner" && documentLoading ? (
                 <Button disabled>Loading signature status...</Button>
               ) : user?.role === "partner" && !acceptance ? (
-                <Button onClick={() => navigate({ to: "/onboarding" })}>
-                  Sign Agreement and NDA
-                </Button>
+                <Button onClick={() => setSignOpen(true)}>Sign {documentType}</Button>
               ) : (
                 <Button onClick={() => window.print()}>
                   <Printer className="mr-2 h-4 w-4" />
@@ -244,6 +247,64 @@ function LegalDocumentPage() {
           </footer>
         </article>
       </PageContainer>
+      <FormDialog
+        open={signOpen}
+        onOpenChange={(open) => {
+          setSignOpen(open);
+          if (!open) setSignatureConfirmed(false);
+        }}
+        title={`Sign ${title}`}
+        description={`This signature applies only to the current ${documentType}. The other document must be signed separately.`}
+        submitLabel={`Sign ${documentType}`}
+        canSubmit={Boolean(signerName.trim()) && signatureConfirmed}
+        onSubmit={async () => {
+          const result = await signAgreementDocument(documentType, signerName.trim());
+          if (result.error) {
+            toast.error(result.error);
+            return;
+          }
+          const signedAt = new Date().toISOString();
+          setAcceptance({ signer_name: signerName.trim(), signed_at: signedAt });
+          setSignOpen(false);
+          setSignatureConfirmed(false);
+          toast.success(
+            result.agreementsComplete
+              ? `${documentType} signed. Both required documents are now complete.`
+              : `${documentType} signed. Review and sign the remaining document to unlock portal access.`,
+          );
+        }}
+      >
+        <label className="block text-xs font-medium">
+          Electronic signature
+          <input
+            className="mt-1 h-10 w-full rounded-md border bg-background px-3 font-serif text-base italic"
+            value={signerName}
+            onChange={(event) => setSignerName(event.target.value)}
+            autoComplete="name"
+          />
+        </label>
+        <label className="block text-xs font-medium">
+          Signature date
+          <input
+            type="date"
+            className="mt-1 h-10 w-full rounded-md border bg-muted px-3 text-sm"
+            value={new Date().toISOString().slice(0, 10)}
+            readOnly
+          />
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={signatureConfirmed}
+            onChange={(event) => setSignatureConfirmed(event.target.checked)}
+          />
+          <span>
+            I have reviewed and agree to this {documentType}, and I consent to use this electronic
+            signature.
+          </span>
+        </label>
+      </FormDialog>
     </>
   );
 }
